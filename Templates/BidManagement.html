@@ -1,0 +1,12 @@
+<form method="POST">
+    <input type="text" name="bidName" placeholder="Enter bid name" required>
+    <input type="checkbox" name="createNewBid"> Create new bid
+    <button type="submit">Submit</button>
+</form>
+
+<h2>Existing Bids</h2>
+<ul>
+    {% for bid in bids %}
+    <li>{{ bid.name }}</li>
+    {% endfor %}
+</ul>

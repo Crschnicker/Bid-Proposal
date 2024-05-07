@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Comprehensive Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Open Sans', sans-serif;
+            text-align: center;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #007bff;
+            background-color: #e7f0fa;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 17px;
+            color: #007bff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .tab button:hover {
+            background-color: #d1e5f1;
+        }
+        .tab button.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #007bff;
+            border-top: none;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .content-wrapper {
+            margin: auto;
+            max-width: 90%;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background-color: #fff;
+        }
+        th {
+            background: linear-gradient(180deg, #e9eff9 0%, #dce4f1 100%);
+            color: #333;
+            font-weight: 600;
+            padding: 10px;
+            text-align: left;
+            border-bottom: 2px solid #007bff;
+        }
+        td {
+            padding: 10px;
+            text-align: left;
+            vertical-align: middle;
+            border-bottom: 1px solid #e1e1e1;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #f9f9f9;
+        }
+        tbody tr:hover {
+            background-color: #eef4fb;
+        }
+        .action-buttons button, .removeBtn {
+            padding: 8px 15px;
+            font-size: 14px;
+            border-radius: 4px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .action-buttons button:hover, .removeBtn:hover {
+            background-color: #218838;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .removeBtn {
+            background-color: #dc3545;
+        }
+        .removeBtn:hover {
+            background-color: #c82333;
+        }
+        .additional-description-container, .total-cost {
+            margin-top: 20px;
+            text-align: left;
+            max-width: 90%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .total-cost {
+            text-align: right;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #007bff;
+        }
+        .ui-autocomplete {
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 20px;
+        }
+        .ui-autocomplete .ui-menu-item .ui-state-active {
+            border: none;
+            background: #007bff;
+            color: white;
+        }
+        .ui-menu-item-wrapper {
+            position: relative;
+            padding: 3px 1rem;
+            border-bottom: 1px solid #e6e6e6;
+            background-color: #fff;
+            cursor: pointer;
+        }
+        .ui-menu-item:last-child .ui-menu-item-wrapper {
+            border-bottom: none;
+        }
+        .selected-row {
+            background-color: #cce5ff !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="tab">
+  <button class="tablinks" onclick="openCategory(event, 'Drains')">Drains</button>
+  <button class="tablinks" onclick="openCategory(event, 'Irrigation')">Irrigation</button>
+  <button class="tablinks" onclick="openCategory(event, 'Landscape')">Landscape</button>
+</div>
+
+<div id="Drains" class="tabcontent">
+  <h3>Drains</h3>
+  <div class="content-wrapper" id="drainsWrapper"></div>
+</div>
+
+<div id="Irrigation" class="tabcontent">
+  <h3>Irrigation</h3>
+  <div class="content-wrapper" id="irrigationWrapper"></div>
+</div>
+
+<div id="Landscape" class="tabcontent">
+  <h3>Landscape</h3>
+  <div class="content-wrapper" id="landscapeWrapper"></div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+  var inventory = [];
+  var factors = [];
+  
+  function fetchInventoryAndFactors() {
+      $.getJSON('/inventory', function(data) {
+          inventory = data.inventory;
+          attachAutocomplete($('.partNumInput'), inventory, false);
+      }).fail(function() {
+          console.log("An error occurred while fetching the inventory.");
+      });
+  
+      $.getJSON('/factors', function(data) {
+          factors = data.factors;
+          attachAutocomplete($('.factorCodeInput'), factors, true);
+      }).fail(function() {
+          console.log("An error occurred while fetching the factors.");
+      });
+  }
+  
+  function openCategory(evt, categoryName) {
+      var i, tabcontent, tablinks;
+      tabcontent = document.getElementsByClassName("tabcontent");
+      for (i = 0; i < tabcontent.length; i++) {
+          tabcontent[i].style.display = "none";
+      }
+      tablinks = document.getElementsByClassName("tablinks");
+      for (i = 0; i < tablinks.length; i++) {
+          tablinks[i].className = tablinks[i].className.replace(" active", "");
+      }
+      document.getElementById(categoryName).style.display = "block";
+      evt.currentTarget.className += " active";
+  }
+  
+  document.addEventListener("DOMContentLoaded", function() {
+      fetchInventoryAndFactors();
+      $('.tablinks:first').click(); // Open the first tab
+  });
+  
+  function initializeTable(wrapperId) {
+      var contentWrapper = $('#' + wrapperId);
+      attachEventHandlers(contentWrapper);
+  }
+  
+  function attachEventHandlers(contentWrapper) {
+      contentWrapper.find('.addBtn').click(function() {
+          addBlankLineItem(contentWrapper.attr('id'), null);
+      });
+  
+      contentWrapper.find('.insertBtn').click(function() {
+          var lineNum = prompt("Enter the line number after which you want to insert a new line:", "");
+          if (lineNum && !isNaN(lineNum) && lineNum > 0) {
+              addBlankLineItem(contentWrapper.attr('id'), parseInt(lineNum));
+          } else {
+              alert("Invalid line number. Please enter a valid line number.");
+          }
+      });
+  
+      contentWrapper.on('click', '.removeBtn', function() {
+          var tr = $(this).closest('tr');
+          tr.remove();
+          updateLineNumbers(contentWrapper);
+          updateTotalCost(contentWrapper);
+      });
+  }
+  
+  function addBlankLineItem(wrapperId, insertAfter) {
+      var contentWrapper = $('#' + wrapperId);
+      var itemsTableBody = contentWrapper.find(".itemsTable tbody");
+      var rowNum = itemsTableBody.children().length + 1;
+      var newRowHtml = getTableRow(rowNum);
+      if (insertAfter) {
+          $(newRowHtml).insertAfter(itemsTableBody.find('tr:eq(' + (insertAfter - 1) + ')'));
+      } else {
+          itemsTableBody.append(newRowHtml);
+      }
+      attachAutocomplete($('.partNumInput').last(), inventory, false);
+      attachAutocomplete($('.factorCodeInput').last(), factors, true);
+      updateLineNumbers(contentWrapper);
+      updateTotalCost(contentWrapper);
+  }
+  
+  function getTableRow(rowNum) {
+      return `<tr data-line-number="${rowNum}">
+          <td>${rowNum}</td>
+          <td><input type='text' class='partNumInput'></td>
+          <td class='description'></td>
+          <td><input type='text' class='factorCodeInput'></td>
+          <td><input type='number' class='quantity' value='1' onchange='updateLineAndTotalCosts(this)'></td>
+          <td class='cost'>$0.00</td>
+          <td class='lineCost'>$0.00</td>
+          <td class='laborHours'>0</td>
+          <td><button class='removeBtn'>Remove</button></td>
+      </tr>`;
+  }
+  
+  function updateLineNumbers(contentWrapper) {
+      var lineNumber = 1;
+      contentWrapper.find(".itemsTable tbody tr").each(function() {
+          $(this).find("td:first").text(lineNumber++);
+      });
+  }
+  
+  function updateTotalCost(contentWrapper) {
+      var totalCost = 0;
+      contentWrapper.find(".itemsTable tbody tr").each(function() {
+          var lineCost = parseFloat($(this).find('.lineCost').text().replace('$', '')) || 0;
+          totalCost += lineCost;
+      });
+      contentWrapper.find(".totalCost span").text(`$${totalCost.toFixed(2)}`);
+  }
+  
+  function updateLineAndTotalCosts(input) {
+      var tr = $(input).closest('tr');
+      var quantity = parseInt(tr.find('.quantity').val()) || 0;
+      var costPerItem = parseFloat(tr.find('.cost').text().replace('$', '')) || 0;
+      var lineCost = quantity * costPerItem;
+      tr.find('.lineCost').text(`$${lineCost.toFixed(2)}`);
+      updateTotalCost(tr.closest('.content-wrapper'));
+  }
+  
+  function attachAutocomplete(input, sourceData, isFactor) {
+      input.autocomplete({
+          source: sourceData.map(item => ({
+              label: isFactor ? `${item.factorCode} - ${item.description}` : `${item.partNumber} - ${item.description}`,
+              value: isFactor ? item.factorCode : item.partNumber,
+              ...item
+          })),
+          select: function(event, ui) {
+              event.preventDefault();
+              $(this).val(ui.item.value);
+              var tr = $(this).closest('tr');
+              if (isFactor) {
+                  tr.find('.laborHours').text(ui.item.laborHours || 0);
+              } else {
+                  tr.find('.description').text(ui.item.description);
+                  tr.find('.cost').text(`$${parseFloat(ui.item.cost).toFixed(2)}`);
+                  updateLineAndTotalCosts(tr.find('.quantity')[0]);
+              }
+          }
+      }).autocomplete("instance")._renderItem = function(ul, item) {
+          return $("<li>")
+              .append("<div>" + item.label + "</div>")
+              .appendTo(ul);
+      };
+  }
+  
+  $(document).ready(function() {
+      initializeTable('drainsWrapper');
+      initializeTable('irrigationWrapper');
+      initializeTable('landscapeWrapper');
+  });
+  </script>
+  

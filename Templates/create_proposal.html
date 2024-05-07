@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Proposal Generation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
+    <style>
+        /* Your existing styles */
+        body {
+            font-family: 'Open Sans', sans-serif;
+            text-align: center;
+            font-size: 24px;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            background-color: #e7f0fa;
+            border: 1px solid #007bff;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 17px;
+            color: #007bff;
+        }
+        .tab button:hover, .tab button.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #007bff;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .tabcontent.active {
+            display: block;
+        }
+        .info-section {
+            margin-bottom: 20px;
+        }
+        .info-section table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .info-section th, .info-section td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #007bff;
+        }
+        .info-section input[type="text"], 
+        .info-section input[type="number"] {
+            width: calc(100% - 16px);
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        .heading-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .heading-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+        }
+        .detail-container {
+            flex-grow: 1;
+            min-width: 250px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        textarea.auto-adjust {
+            width: calc(100% - 40px);
+            border: none;
+            background-color: #f4f7f6;
+            overflow-y: hidden;
+            resize: none;
+            min-height: 38px;
+        }
+        .generate-report {
+            background-color: #4CAF50;
+            color: white;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Home Button using <a> tag -->
+<div class="home-button-container" style="text-align: left; margin-bottom: 20px;">
+    <a href="/" style="display: inline-block; padding: 10px 20px; font-size: 16px; text-decoration: none; color: white; background-color: #007bff; border: none; cursor: pointer;">Home</a>
+</div>
+    
+<form action="/submit-proposal-data" method="POST" id="proposalForm">
+    <input type="hidden" name="next_tab" id="nextTabField" value="">
+    <div class="tab">
+        <button type="button" class="tablinks" onclick="openTab(event, 'Heading')">Heading</button>
+        <button type="button" class="tablinks" onclick="openTab(event, 'ProposalAmounts')">Proposal Amounts</button>
+        <button type="button" class="tablinks" onclick="openTab(event, 'Options')">Options</button>
+        <button type="button" class="tablinks" onclick="openTab(event, 'SpecialNotes')">Special Notes</button>
+        <button type="button" class="tablinks" onclick="openTab(event, 'TermsConditions')">Terms/Conditions</button>
+        <button type="button" class="tablinks generate-report" onclick="generateReport()" style="float:right;">Generate Proposal</button>
+    </div>
+    <div id="Heading" class="tabcontent active">
+        <h1>Proposal</h1>
+
+        <!-- Heading Details Flex Container -->
+        <div class="heading-details" style="display: flex; justify-content: space-between; align-items: stretch;">
+            <!-- Bid/Job ID -->
+            <div class="detail-container" style="flex-grow: 1; min-width: 250px; padding: 10px; box-sizing: border-box; margin-right: 10px;">
+                <label for="bidJobId">Bid ID</label>
+                <input type="text" id="bidJobId" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 8px;">
+            </div>
+            <!-- Bid Date -->
+            <div class="detail-container" style="flex-grow: 1; min-width: 250px; padding: 10px; box-sizing: border-box; margin-right: 10px;">
+                <label for="bidDate">Bid Date</label>
+                <input type="text" id="bidDate" value="2/28/2024" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 8px;">
+            </div>
+            <!-- Total Budget -->
+            <div class="detail-container" style="flex-grow: 1; min-width: 250px; padding: 10px; box-sizing: border-box;">
+                <label for="totalBudget">Total Budget</label>
+                <input type="number" id="totalBudget" placeholder="Total Budget ($)" disabled style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 8px;">
+            </div>
+        </div>
+
+
+        <!-- Heading Details Flex Container -->
+        <div class="heading-details" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+            <!-- Customer Information Section -->
+            <div class="info-section" style="border: 1px solid #ccc; padding: 10px;">
+                <h3>Customer Information</h3>
+                <table>
+                    <tr><th>Name</th><td><input type="text" id="customerName"></td></tr>
+                    <tr><th>Contact Name</th><td><input type="text" id="contactName"></td></tr>
+                    <tr><th>Address</th><td><input type="text" id="customerAddress"></td></tr>
+                    <tr><th>City</th><td><input type="text" id="customerCity"></td></tr>
+                    <tr><th>State</th><td><input type="text" id="customerState"></td></tr>
+                    <tr><th>Zip Code</th><td><input type="text" id="customerZip"></td></tr>
+                    <tr><th>Phone</th><td><input type="text" id="customerPhone"></td></tr>
+                    <tr><th>Fax</th><td><input type="text" id="customerFax"></td></tr>
+                </table>
+            </div>
+            
+            <!-- Architect Section -->
+            <div class="info-section" style="border: 1px solid #ccc; padding: 10px;">
+                <h3>Architect</h3>
+                <table>
+                    <tr><th>Name</th><td><input type="text" id="architectName"></td></tr>
+                    <tr><th>Specifications</th><td><input type="text" id="architectSpecifications"></td></tr>
+                    <tr><th>Dated</th><td><input type="text" id="architectDated"></td></tr>
+                    <tr><th>Sheets</th><td><input type="text" id="architectSheets"></td></tr>
+                </table>
+            </div>
+            
+            <!-- Job Section -->
+            <div class="info-section" style="border: 1px solid #ccc; padding: 10px;">
+                <h3>Job</h3>
+                <table>
+                    <tr><th>Name</th><td><input type="text" id="jobName"></td></tr>
+                    <tr><th>City</th><td><input type="text" id="jobCity"></td></tr>
+                    <tr><th>Revision Number</th><td><input type="text" id="revisionNumber"></td></tr>
+                </table>
+            </div>
+            
+            <!-- Engineer Section -->
+            <div class="info-section" style="border: 1px solid #ccc; padding: 10px;">
+                <h3>Engineer</h3>
+                <table>
+                    <tr><th>Name</th><td><input type="text" id="engineerName"></td></tr>
+                    <tr><th>Specifications</th><td><input type="text" id="engineerSpecifications"></td></tr>
+                    <tr><th>Dated</th><td><input type="text" id="engineerDated"></td></tr>
+                    <tr><th>Sheets</th><td><input type="text" id="engineerSheets"></td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="ProposalAmounts" class="tabcontent">
+        <h3>Proposal Amounts</h3>
+        <div class="info-section" style="border: 1px solid #ccc; padding: 10px;">
+            <table id="proposalTable">
+                <tr><th>Description</th><th>Amount ($)</th></tr>
+                <!-- Landscaping -->
+                <tr><td>Landscaping</td><td><input type="number" id="landscapingAmount" placeholder="Amount ($)"></td></tr>
+                <!-- Drains -->
+                <tr><td>Drains</td><td><input type="number" id="drainsAmount" placeholder="Amount ($)"></td></tr>
+                <!-- Irrigation -->
+                <tr><td>Irrigation</td><td><input type="number" id="irrigationAmount" placeholder="Amount ($)"></td></tr>
+            </table>
+            <button type="button" onclick="addProposalLine(event)">Add Line</button>
+        </div>
+    </div>
+
+    <script>
+        function addProposalLine(event) {
+            event.preventDefault(); // Prevent form submission
+            var table = document.getElementById("proposalTable");
+            var row = table.insertRow(-1); // Insert at the end
+            var cell1 = row.insertCell(0);
+            var cell2 = row.insertCell(1);
+            var cell3 = row.insertCell(2); // Cell for the remove button
+            cell1.innerHTML = '<input type="text" placeholder="Custom Description" style="width: 100%;">';
+            cell2.innerHTML = '<input type="number" placeholder="Amount ($)" style="width: 100%;">';
+            appendRemoveButton(cell3, row);
+        }
+    
+        function appendRemoveButton(cell, row) {
+            var removeBtn = document.createElement("button");
+            removeBtn.textContent = "Remove";
+            removeBtn.onclick = function() {
+                row.remove();
+            };
+            removeBtn.setAttribute("style", "padding: 5px 10px; font-size: 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;");
+            cell.appendChild(removeBtn);
+        }
+    
+        function addRemoveButtonsToExistingRows() {
+            var table = document.getElementById("proposalTable");
+            // Start at 1 to skip the header row
+            for (var i = 1; i < table.rows.length; i++) {
+                var row = table.rows[i];
+                var cell = row.cells[2]; // Assuming 2 is the index for the new "Remove" button cell
+    
+                // Check if the remove button already exists
+                if (!cell || cell.getElementsByTagName("button").length === 0) {
+                    var newCell = row.insertCell(2); // Add a new cell for the remove button if not already present
+                    appendRemoveButton(newCell, row);
+                }
+            }
+        }
+    
+        // Call addRemoveButtonsToExistingRows when the document is loaded
+        document.addEventListener("DOMContentLoaded", function() {
+            addRemoveButtonsToExistingRows();
+        });
+    </script>    
+
+
+
+    <div id="Options" class="tabcontent">
+        <h3>Options</h3>
+        <div class="info-section" style="border: 1px solid #ccc; padding: 10px;">
+            <table id="optionsTable">
+                <tr><th>Description</th><th>Amount ($)</th></tr>
+            </table>
+            <button type="button" onclick="addOptionLine(event)">Add Line</button>
+        </div>
+    </div>
+
+    <script>
+        function addOptionLine(event) {
+            event.preventDefault(); // Prevent form submission
+            var table = document.getElementById("optionsTable");
+            var row = table.insertRow(-1); // Insert at the end
+            var cell1 = row.insertCell(0);
+            var cell2 = row.insertCell(1);
+            var cell3 = row.insertCell(2); // Cell for the remove button
+            cell1.innerHTML = '<input type="text" placeholder="Custom Description" style="width: 100%;">';
+            cell2.innerHTML = '<input type="number" placeholder="Amount ($)" style="width: 100%;">';
+            appendRemoveButton(cell3, row);
+        }
+
+        // Reuse the appendRemoveButton function as it is
+
+        function addRemoveButtonsToOptionsRows() {
+            var table = document.getElementById("optionsTable");
+            for (var i = 1; i < table.rows.length; i++) {
+                var row = table.rows[i];
+                var removeCell = row.insertCell(2); // Add the remove button cell
+                appendRemoveButton(removeCell, row);
+            }
+        }
+
+        // Adjust DOMContentLoaded listener to initialize both tables
+        document.addEventListener("DOMContentLoaded", function() {
+            addRemoveButtonsToExistingRows();
+            addRemoveButtonsToOptionsRows();
+        });
+    </script>
+
+
+
+    <div id="SpecialNotes" class="tabcontent">
+        <h3>Special Notes</h3>
+        <textarea id="specialNotes" rows="4"></textarea>
+    </div>
+    <div id="TermsConditions" class="tabcontent" style="display: none;">
+        <h3 style="margin-bottom: 20px;">Terms/Conditions</h3>
+        <div class="info-section" style="border: 1px solid #007bff; padding: 20px; background-color: #f4f7f6; border-radius: 8px;">
+            <table style="width: 100%;">
+                <tr>
+                    <td><textarea id="line1" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Contractor shall hold subcontractor harmless for damaged utility lines which are not buried to the depth specified by the utility companies.</textarea></td>
+                    <td><button onclick="editLine(1)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(1)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line2" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">In addition, there will be an extra charge for all drainlines or pipes required to be placed Payment schedule: Progressive payments bi-weekly for all work completed and accepted. Five (5%) percent retention of contract amount may be held for thirty (30) days from the completion and acceptance of the irrigation This bid proposal will be considered a part of the contract if Buccola Landscape, Inc. is awarded the contract. It can either be an exhibit to the contract, or its pertinent points may be added to the contract.</textarea></td>
+                    <td><button onclick="editLine(2)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(2)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line3" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Prices are valid for work completed within six (6) months of proposal date.</textarea></td>
+                    <td><button onclick="editLine(3)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(3)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line7" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Any rock encountered below grade will be removed on a time and material basis.</textarea></td>
+                    <td><button onclick="editLine(7)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(7)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line9" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Grade to be received by Buccala Landscape, Inc. at - ,40 of finish grade, and in a weed-free condition unless noted otherwise.</textarea></td>
+                    <td><button onclick="editLine(9)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(9)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line11" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">This proposal is based on the entire job being completed in 1 phase(s). Any additional move-ins shall be compensated by the owner, induding additional maintenance.</textarea></td>
+                    <td><button onclick="editLine(11)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(11)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line12" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Any specimen trees, park furniture, etc, that would require a deposit to initiate a hold order will require prompt reimbursement from the owner/dient to Buccola Landscape, Inc. within seven (7) calendar days.</textarea></td>
+                    <td><button onclick="editLine(12)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(12)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line13" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Regarding palm/olive trees: The tree guarantee wil apply to all palms/olives supplied in established boxes. Buccola Landscape, Inc, does not guarantee balled and burlaped palms, many of which have recently been</textarea></td>
+                    <td><button onclick="editLine(13)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(13)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line14" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">Buccola Landscape, Inc. will agree to participate in an O.C.I.P. program if applicable to this project. Our bid reflects 'net' pricing and unless noted does not incude additional monies for insurance premiums.</textarea></td>
+                    <td><button onclick="editLine(14)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(14)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <tr>
+                    <td><textarea id="line15" rows="1" style="width: calc(100% - 40px); border: none; background-color: #f4f7f6;">This proposal is valid for thirty (30) days.</textarea></td>
+                    <td><button onclick="editLine(15)" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button></td>
+                    <td><button onclick="removeLine(15)" style="padding: 8px 12px; background-color: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button></td>
+                </tr>
+                <!-- Add Custom Line Button -->
+                <tr>
+                    <td colspan="2" style="text-align: center; padding: 10px;">
+                        <button onclick="addCustomLine()" style="padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Add Custom Line</button>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</form>
+
+<script>
+    function editLine(lineId) {
+        var textArea = document.getElementById(lineId);
+        textArea.readOnly = !textArea.readOnly; // This correctly toggles the readOnly state
+        if (textArea.readOnly) {
+            textArea.style.backgroundColor = "#f4f7f6"; // Non-editable background color
+        } else {
+            textArea.style.backgroundColor = "#ffffff"; // Editable background color
+        }
+    }
+    function removeLine(lineId) {
+        var elementToRemove = document.getElementById(lineId).parentNode.parentNode;
+        elementToRemove.remove();
+    }
+    
+    function addCustomLine() {
+        var table = document.querySelector("#TermsConditions .info-section table");
+        var rowCount = table.rows.length;
+        var newRow = table.insertRow(rowCount - 1); // Insert before the last row (Add Custom Line button row)
+        var cell1 = newRow.insertCell(0);
+        var cell2 = newRow.insertCell(1);
+        var cell3 = newRow.insertCell(2);
+        var textarea = document.createElement("textarea");
+        var lineId = "line" + rowCount;
+        textarea.id = lineId;
+        textarea.rows = "1";
+        textarea.style.width = "calc(100% - 80px)";
+        textarea.style.resize = "none";
+        textarea.placeholder = "Enter your custom line...";
+        textarea.style.border = "none";
+        textarea.style.backgroundColor = "#f4f7f6";
+        cell1.appendChild(textarea);
+        var editButton = document.createElement("button");
+        editButton.textContent = "Edit";
+        editButton.onclick = function() { editLine(lineId); };
+        editButton.style.padding = "8px 12px";
+        editButton.style.backgroundColor = "#007bff";
+        editButton.style.color = "white";
+        editButton.style.border = "none";
+        editButton.style.borderRadius = "4px";
+        editButton.style.cursor = "pointer";
+        cell2.appendChild(editButton);
+        var removeButton = document.createElement("button");
+        removeButton.textContent = "Remove";
+        removeButton.onclick = function() { removeLine(lineId); };
+        removeButton.style.padding = "8px 12px";
+        removeButton.style.backgroundColor = "#ff4444";
+        removeButton.style.color = "white";
+        removeButton.style.border = "none";
+        removeButton.style.borderRadius = "4px";
+        removeButton.style.cursor = "pointer";
+        cell3.appendChild(removeButton);
+    }
+</script>
+
+
+
+<script>
+    function adjustTextareaHeight(textarea) {
+        // Force the textarea to 'auto' height before calculating the scrollHeight
+        textarea.style.height = 'auto';
+        // Use window.getComputedStyle to get the actual height including padding
+        const computedStyle = window.getComputedStyle(textarea);
+        // Calculate height, considering box-sizing property
+        const height = textarea.scrollHeight + 
+                       parseInt(computedStyle.getPropertyValue('border-top-width'), 10) + 
+                       parseInt(computedStyle.getPropertyValue('border-bottom-width'), 10);
+        // Apply the calculated height plus a little extra space to avoid scroll bar appearance
+        textarea.style.height = `${height}px`;
+    }
+
+    // Function to debounce the adjustment to ensure it triggers after input and rendering complete
+    function debounce(func, wait, immediate) {
+        let timeout;
+        return function() {
+            const context = this, args = arguments;
+            const later = function() {
+                timeout = null;
+                if (!immediate) func.apply(context, args);
+            };
+            const callNow = immediate && !timeout;
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+            if (callNow) func.apply(context, args);
+        };
+    }
+
+    document.addEventListener('input', function(event) {
+        if (event.target.tagName.toLowerCase() === 'textarea' && event.target.classList.contains('auto-adjust')) {
+            // Debounce adjustTextareaHeight to ensure it executes after the browser completes rendering
+            debounce(adjustTextareaHeight(event.target), 250);
+        }
+    });
+
+    window.onload = function() {
+        // Adjust the height of all textareas with the 'auto-adjust' class on page load
+        document.querySelectorAll('textarea.auto-adjust').forEach(adjustTextareaHeight);
+    };
+    function openTab(evt, tabName) {
+    // Prevent the default form submission
+    evt.preventDefault();
+
+    // Update the URL with the selected tab without reloading the page
+    window.history.pushState({}, '', '?tab=' + tabName);
+
+    // Call a function to show the tab
+    showTab(tabName);
+    }
+
+    // Function to show a tab
+    function showTab(tabName) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tablinks");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(tabName).style.display = "block";
+        document.querySelector("[onclick=\"openTab(event, '" + tabName + "')\"]").className += " active";
+    }
+    async function generateReport() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let y = 10; // Starting position
+
+        // Document Title
+        doc.setFontSize(18);
+        doc.text('Proposal Report', 105, y, null, null, 'center');
+        y += 10;
+
+        // Add Heading Details
+        doc.setFontSize(12);
+        addHeadingDetails(doc, y);
+
+        // Proposal Amounts
+        y += 10; // Adjust spacing
+        y = addTableDataToPDF(doc, 'Proposal Amounts', 'proposalTable', y);
+
+        // Options - Repeat the same logic for Options if you have a similar table structure
+
+        // Special Notes
+        y += 10; // Adjust spacing
+        addSpecialNotes(doc, y);
+
+        // Terms and Conditions - Implement similarly to Special Notes or as required
+
+        // Save PDF
+        doc.save('ProposalReport.pdf');
+    }
+
+    // Example function to add Heading Details
+    function addHeadingDetails(doc, startY) {
+        let y = startY;
+        // Example: Bid ID
+        doc.text(`Bid ID: ${getValueById('bidJobId')}`, 10, y);
+        y += 10;
+        // Repeat for other fields...
+    }
+
+    // Helper function to retrieve value by ID with fallback
+    function getValueById(id) {
+        const element = document.getElementById(id);
+        return element ? element.value : 'N/A';
+    }
+
+    // Example function to add table data
+    function addTableDataToPDF(doc, sectionTitle, tableId, startY) {
+        let y = startY;
+        doc.setFontSize(14);
+        doc.text(sectionTitle + ':', 10, y);
+        y += 10;
+
+        const table = document.getElementById(tableId);
+        if (table) {
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                // Skip the header row and assuming two columns for simplicity
+                if (index > 0) {
+                    const descriptionInput = row.cells[0]?.querySelector('input');
+                    const amountInput = row.cells[1]?.querySelector('input');
+                    if(descriptionInput && amountInput) { // Check if inputs exist
+                        const description = descriptionInput.value;
+                        const amount = amountInput.value;
+                        doc.setFontSize(12);
+                        doc.text(`- ${description}: $${amount}`, 10, y);
+                        y += 10;
+                    }
+                }
+            });
+        }
+        return y; // Return updated Y position
+    }
+
+// Example function to add Special Notes
+function addSpecialNotes(doc, startY) {
+    let y = startY;
+    const specialNotes = getValueById('specialNotes');
+    if (specialNotes !== 'N/A') {
+        doc.setFontSize(14);
+        doc.text('Special Notes:', 10, y);
+        y += 10;
+        // Split text to fit the page
+        const splitText = doc.splitTextToSize(specialNotes, 180);
+        splitText.forEach(text => {
+            doc.text(text, 10, y);
+            y += 10;
+        });
+    }
+}
+
+// Load the correct tab based on the URL parameter 'tab'
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tab = urlParams.get('tab');
+        if (tab) {
+            showTab(tab);
+        } else {
+            // Default to showing the first tab if no parameter is specified
+            showTab('Heading');
+        }
+    });
+
+</script>
+
+</body>
+</html>

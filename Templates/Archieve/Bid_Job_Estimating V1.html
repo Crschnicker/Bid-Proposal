@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bid/Job Estimate</title>
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        .content-wrapper {
+            margin: auto;
+            max-width: 80%;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        #itemsTable {
+            margin: auto;
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: auto;
+        }
+        #itemsTable th, #itemsTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: middle;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        #itemsTable input[type='text'], 
+        #itemsTable input[type='number'] {
+            font-size: 1rem; /* Adjust the font size as needed */
+            padding: .5rem; /* Provides padding inside the input field for better visibility */
+        }
+
+        #itemsTable td {
+            font-size: 1rem; /* Adjust the font size as needed */
+        }
+        .action-buttons {
+            margin-top: 20px;
+        }
+        button {
+            cursor: pointer;
+            margin-right: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .total-cost {
+            margin-top: 20px;
+        }
+        #addBtn, #insertBtn {
+            font-size: 18px;
+            padding: 12px 25px;
+        }
+        .additional-description-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #additionalDescription {
+            padding: 8px;
+            margin-top: 5px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            width: 100%;
+            max-width: 500px;
+        }
+        #itemsTable tbody tr.selected {
+            background-color: #add8e6;
+        }
+    </style>
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script>
+        var inventory = [];
+
+        function fetchInventory() {
+            $.getJSON('/inventory', function(data) {
+                inventory = data;
+            }).fail(function() {
+                console.log("An error occurred while fetching the inventory.");
+            });
+        }
+    
+        $(document).ready(function() {
+            fetchInventory();
+
+            $("#addBtn").click(function() {
+                addBlankLineItem();
+            });
+    
+            $("#insertBtn").click(function() {
+                var lineNum = prompt("Enter the line number after which you want to insert a new line:", "");
+                lineNum = parseInt(lineNum);
+                if (!isNaN(lineNum) && lineNum >= 1 && lineNum <= $("#itemsTable tbody tr").length) {
+                    addBlankLineItem(lineNum);
+                } else {
+                    alert("Invalid line number. Please enter a valid line number.");
+                }
+            });
+
+            $("#itemsTable tbody").on('click', 'tr', function(event) {
+                if (!$(event.target).is('input, button')) {
+                    $("#itemsTable tbody tr.selected").removeClass('selected');
+                    $(this).addClass('selected');
+                    $('#additionalDescription').val($(this).data('additionalDescription'));
+                }
+            });
+
+            $("#additionalDescription").change(function() {
+                var additionalDescription = $(this).val();
+                $("#itemsTable tbody tr.selected").data('additionalDescription', additionalDescription);
+            });
+        });
+            
+        function addBlankLineItem(lineNum) {
+            var itemsTableBody = $("#itemsTable tbody");
+            var rowNum = itemsTableBody.children().length + 1;
+            var newRowHtml = getTableRow(rowNum);
+            var newRow = $(newRowHtml).appendTo(itemsTableBody);
+
+            attachAutocomplete(newRow.find('.partNumInput'));
+            attachRemoveButtonEvent(newRow.find('.removeBtn'));
+
+            if (lineNum !== undefined) {
+                var actualRowNum = Math.min(lineNum, itemsTableBody.children().length) - 1;
+                newRow.insertAfter(itemsTableBody.find("tr").eq(actualRowNum));
+            }
+
+            updateLineNumbers();
+            updateTotalCost();
+        }
+
+        function getTableRow(rowNum) {
+            return `
+                <tr data-line-number="${rowNum}" data-additional-description="">
+                    <td class='line-number'>${rowNum}</td>
+                    <td><input type='text' class='partNumInput input-large'></td>
+                    <td class='description'></td>
+                    <td class='factorCode'></td>
+                    <td><input type='number' class='quantity input-large' value='1' onchange='updateLineAndTotalCosts(this)'></td>
+                    <td class='cost input-large'>$0.00</td>
+                    <td><button class='removeBtn'>Remove</button></td>
+                </tr>`;
+        }
+
+        function updateTotalCost() {
+            var totalCost = 0;
+            $("#itemsTable tbody tr").each(function() {
+                var cost = parseFloat($(this).find('.cost').text().replace('$', '')) || 0;
+                var quantity = parseInt($(this).find('.quantity').val()) || 0;
+                totalCost += parseFloat(cost) * parseInt(quantity);
+            });
+            $("#totalCost").text(`$${totalCost.toFixed(2)}`);
+        }
+
+        function attachAutocomplete(selector) {
+            selector.autocomplete({
+                minLength: 0, // Trigger autocomplete immediately
+                source: function(request, response) {
+                    var term = $.ui.autocomplete.escapeRegex(request.term),
+                        startsWithMatcher = new RegExp("^" + term, "i"),
+                        containsMatcher = new RegExp(term, "i"),
+                        startsWith = [],
+                        contains = [];
+                    $.each(inventory, function(i, item) {
+                        var text = item.PartNum + " - " + item.Description;
+                        if (startsWithMatcher.test(text)) {
+                            startsWith.push({
+                                label: text,
+                                value: item.PartNum,
+                                item: item
+                            });
+                        } else if (containsMatcher.test(text)) {
+                            contains.push({
+                                label: text,
+                                value: item.PartNum,
+                                item: item
+                            });
+                        }
+                    });
+                    response(startsWith.concat(contains));
+                },
+                select: function(event, ui) {
+                    var tr = $(this).closest('tr');
+                    tr.find('.description').text(ui.item.item.Description);
+                    tr.find('.factorCode').text(ui.item.item['Factor Code'] || '');
+                    tr.find('.cost').text(`$${ui.item.item.Cost}`);
+                    tr.find('.quantity').val(1); // Reset quantity or set to default
+                    updateTotalCost(); // Update total cost whenever an item is selected
+                },
+                focus: function(event, ui) { // Prevent the value inserted on focus from being the object.
+                    event.preventDefault();
+                    $(this).val(ui.item.value);
+                }
+            }).focus(function () { // Open the autocomplete dropdown on input focus
+                $(this).autocomplete("search", $(this).val());
+            });
+        }
+
+
+        function attachRemoveButtonEvent(selector) {
+            selector.on('click', function() {
+                $(this).closest('tr').remove();
+                updateTotalCost();
+                updateLineNumbers();
+            });
+        }
+
+        function updateLineNumbers() {
+            $("#itemsTable tbody tr").each(function(index) {
+                $(this).find("td.line-number").text(index + 1);
+            });
+        }
+    </script>
+</head>
+<body>
+    <div class="content-wrapper">
+        <h1>Bid/Job Estimate</h1>
+        <div class="action-buttons">
+            <button id="addBtn">Add Line Item</button>
+            <button id="insertBtn">Insert Line Item</button>
+        </div>
+
+        <div class="table-container">
+            <h2>Bid Items</h2>
+            <table id="itemsTable">
+                <thead>
+                    <tr>
+                        <th>Line Number</th>
+                        <th>Part Number</th>
+                        <th>Description</th>
+                        <th>Factor Code</th>
+                        <th>Quantity</th>
+                        <th>Cost</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dynamic content will be appended here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="additional-description-container">
+            <label for="additionalDescription">Additional Description:</label>
+            <input type="text" id="additionalDescription" style="width: 100%; max-width: 500px;" onchange="updateAdditionalDescription()">
+        </div>
+        
+        <div class="total-cost">
+            <h2>Total Cost: <span id="totalCost">$0.00</span></h2>
+        </div>
+    </div>
+</body>
+</html>

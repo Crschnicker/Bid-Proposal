@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add or Update Bid</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Add/Update Bid</h1>
+    <form id="bidForm">
+        <div>
+            <label for="BidID">Bid ID (Name):</label>
+            <input type="text" id="BidID" name="BidID" required>
+            <button type="button" id="checkBid">Check Bid</button>
+        </div>
+        <!-- Placeholder for additional form fields -->
+        <br>
+        <input type="button" id="submitForm" value="Submit">
+    </form>
+
+    <script>
+        $(document).ready(function() {
+            $('#submitForm').click(function() {
+                var bidID = $('#BidID').val();
+                var formData = {
+                    bidID: bidID,
+                    // Add any additional form data here
+                };
+
+                // Check if we're updating an existing bid or creating a new one
+                var updateExisting = $('#updateExistingBid').is(':checked');
+                var formAction = updateExisting ? '/update-bid' : '/create-bid';
+
+                $.ajax({
+                    url: formAction,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function(response) {
+                        // Redirect or handle the response on success
+                        console.log('Success:', response);
+                        alert('Bid processed successfully!');
+                    },
+                    error: function(xhr, status, error) {
+                        // Handle any errors
+                        console.error('Error:', error);
+                        alert("An error occurred.");
+                    }
+                });
+            });
+
+            $('#checkBid').click(function() {
+                var bidID = $('#BidID').val();
+
+                $.ajax({
+                    url: '/check-bid',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ bidID: bidID }),
+                    success: function(data) {
+                        if (data.exists) {
+                            $('#updateExistingBid').prop('checked', true);
+                            autofillForm(data.details);
+                        } else {
+                            alert("Bid does not exist. Proceed to create a new bid.");
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error:', error);
+                        alert("An error occurred.");
+                    }
+                });
+            });
+
+            function autofillForm(details) {
+                // Autofill the form with bid details for updating
+                // Example: $('#someField').val(details.someField);
+            }
+        });
+    </script>
+</body>
+</html>

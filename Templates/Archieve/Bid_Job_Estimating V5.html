@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Comprehensive Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <style>
+        body {
+            font-family: 'Open Sans', sans-serif;
+            text-align: center;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #007bff;
+            background-color: #e7f0fa;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 17px;
+            color: #007bff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .tab button:hover, .tab button.active {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold; /* Increase font weight for active/hover tab */
+        }
+        .tabcontent {
+            display: block; /* Changed from 'none' to 'block' */
+            padding: 20px;
+            border: 1px solid #007bff;
+            border-top: none;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            font-size: 100%;
+        }
+        .heading-info {
+            display: flex; /* Changed to flex for inline display */
+            justify-content: space-around; /* Distribute space around items */
+            align-items: center; /* Center items vertically */
+            margin-bottom: 20px;
+        }
+        .heading-content {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .info-table-container {
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border: 1px solid #007bff;
+        }
+    /* Adjust the input fields for part number and factor code */
+        .info-table-container input[type="text"].partNumInput,
+        .info-table-container input[type="text"].factorCodeInput {
+            padding: 24px 30px; /* Increase padding for a larger touch area */
+            font-size: 1.2em; /* Increase font size for better readability */
+            margin-bottom: 10px; /* Maintain a margin for visual separation */
+            width: 100%; /* Ensure the input fields take up the full container width */
+            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+        }
+        /* Adjust the input fields for part number and factor code to fit the larger style */
+        .info-table-container input[type="text"].partNumInput,
+        .info-table-container input[type="text"].factorCodeInput,
+        .itemsTable input[type="text"],
+        .itemsTable input[type="number"] {
+            height: 35px; /* Adjust the height to match the table's row height */
+            padding: 6px 12px; /* Adjust the padding to ensure text is vertically centered */
+            font-size: 1.1em; /* Increase the font size for better readability */
+            border: 1px solid #ccc; /* Add a border that matches the rest of your design */
+            box-sizing: border-box; /* Ensures padding doesn't affect overall dimensions */
+            width: 100%; /* Makes the input take up the full cell width */
+        }
+        /* Ensure that autocomplete dropdowns match the input field font size */
+        .ui-autocomplete {
+            font-size: 1.1em; /* Ensure the dropdown font size is consistent with the input fields */
+        }
+        /* Additional styles for input fields */
+        .info-table-container input[type="text"],
+        .itemsTable input[type="text"],
+        .itemsTable input[type="number"],
+        #additionalDescription,
+        .heading-info input[type="text"] {
+            height: 35px; /* Consistent height for all input fields */
+            padding: 6px 12px; /* Padding to center the text vertically */
+            font-size: 1.1em; /* Larger font size for readability */
+            border: 1px solid #ccc; /* Border to match other fields */
+            box-sizing: border-box; /* Include padding in width and height */
+            width: 100%; /* Full width to fit container */
+        }
+        /* Apply similar styles for any dropdowns in the heading info, if needed */
+        .heading-info select {
+            height: 35px;
+            padding: 6px 12px;
+            font-size: 1.1em;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        .action-buttons {
+            margin-bottom: 20px; /* Increased space above the buttons */
+            text-align: center;
+        }
+        /* Adjust the font size and padding of the table cells to ensure the content aligns well */
+        table.itemsTable th, 
+        table.itemsTable td {
+            padding: 12px; /* Larger padding for better alignment with larger input fields */
+            font-size: 1em; /* Adjust font size if necessary for table headers and cells */
+        }
+        .budget-container {
+            grid-column: 1 / -1;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #e1e1e1;
+        }
+        th {
+            background: linear-gradient(180deg, #e9eff9 0%, #dce4f1 100%);
+            color: #333;
+            font-weight: 600;
+            border-bottom: 2px solid #007bff;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #f9f9f9;
+        }
+        tbody tr:hover {
+            background-color: #eef4fb;
+        }
+        .action-buttons button, .removeBtn {
+            padding: 12px 18px; /* Increased padding for larger button size */
+            font-size: 21px; /* Increased font size to match the overall 150% increase */
+            border-radius: 6px; /* Optionally adjust the border-radius for a more proportionate look */
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .action-buttons button:hover, .removeBtn:hover {
+            background-color: #007BFF; /* Hover effect for buttons, adjusted for consistency */
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16); /* Slightly larger shadow for emphasis */
+        }
+        .removeBtn {
+            background-color: #dc3545;
+        }
+        .removeBtn:hover {
+            background-color: #c82333;
+        }
+        .additional-description-container, .total-cost {
+            margin-top: 20px;
+            text-align: left;
+            max-width: 90%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .total-cost {
+            text-align: right;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #007bff;
+        }
+        label {
+            margin-right: 10px;
+        }
+        /* Ensure the flex container stretches its children to fill the space */
+        .heading-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+        }
+        /* Give the input containers a minimum width and allow them to grow */
+        .detail-container {
+            flex-grow: 1; /* This will allow the container to grow */
+            min-width: 250px; /* This sets a minimum width for smaller screens */
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        /* Style for 'Bid/Job ID' and 'Bid Date' labels */
+        .heading-details label {
+            font-size: 1.5em; /* Significantly larger font size */
+            font-weight: bold; /* Bold font weight */
+            display: block; /* Display as block to ensure it takes the full line */
+            margin-bottom: 5px; /* Space between label and input */
+        }
+        /* Style for input fields to match the label size */
+        .heading-details input[type="text"] {
+            font-size: 1.2em; /* Larger font size for the input */
+            padding: 10px; /* Larger padding for better legibility and touch */
+            margin-bottom: 10px; /* Space after each input */
+        }
+        /* Style for all subtitles/captions in each section */
+        .tabcontent caption, /* This will target table captions */
+        .tabcontent h3 /* This will target h3 subtitles */ {
+            font-weight: bold; /* Make text bold */
+            /* You can also increase the font size if needed */
+            font-size: 1.1em; /* Example size, adjust as needed */
+        }
+        /* Updated column width adjustments */
+        .itemsTable th.lineNumber, .itemsTable td.lineNumber {
+            width: 5%; /* 50% smaller than your default, adjust as needed */
+        }
+
+        .itemsTable th.partNumber, .itemsTable td.partNumber {
+            width: 9%; /* 40% smaller than your previous setting */
+        }
+
+        .itemsTable th.description, .itemsTable td.description {
+            width: auto; /* Allows this column to take up the freed-up space */
+        }
+
+        .itemsTable th.factorCode, .itemsTable td.factorCode {
+            width: 8%; /* Keeps the 40% smaller adjustment */
+        }
+
+        .itemsTable th.quantity, .itemsTable td.quantity {
+            width: 5%; /* 75% smaller than your default, as previously set */
+        }
+
+        /* Adjust other columns to fit the table layout, if necessary */
+        .itemsTable th.cost, .itemsTable td.cost,
+        .itemsTable th.lineCost, .itemsTable td.lineCost,
+        .itemsTable th.laborHours, .itemsTable td.laborHours,
+        .itemsTable th.action, .itemsTable td.action {
+            width: 10%; /* Adjust if necessary to ensure the table fits as intended */
+        }
+        .selected {
+            background-color: #007bff !important; /* Ensures blue color overrides others */
+            color: #ffffff !important; /* Ensures text color is white */
+        }
+    </style>    
+</head>
+<body>
+<!-- Home Button using <a> tag -->
+<div class="home-button-container" style="text-align: left; margin-bottom: 20px;">
+    <a href="/" style="display: inline-block; padding: 10px 20px; font-size: 16px; text-decoration: none; color: white; background-color: #007bff; border: none; cursor: pointer;">Home</a>
+</div>
+
+<div class="tab">
+    <button class="tablinks" onclick="openCategory(event, 'Heading')">Heading</button>
+    <button class="tablinks" onclick="openCategory(event, 'Drains')">Drains</button>
+    <button class="tablinks" onclick="openCategory(event, 'Irrigation')">Irrigation</button>
+    <button class="tablinks" onclick="openCategory(event, 'Landscape')">Landscape</button>
+    <button class="tablinks" onclick="openCategory(event, 'Maintenance')">Maintenance</button> <!-- New Maintenance Tab Button -->
+</div>
+
+
+<div id="Heading" class="tabcontent">
+    <h3>Bid Summary</h3>
+    <!-- Heading Details Flex Container -->
+    <div class="heading-details">
+        <!-- Bid/Job ID -->
+        <div class="detail-container">
+            <label for="bidJobId">Bid/Job ID</label>
+            <input type="text" id="bidJobId">
+        </div>
+        <!-- Bid Date -->
+        <div class="detail-container">
+            <label for="bidDate">Bid Date</label>
+            <input type="text" id="bidDate" value="2/28/2024">
+        </div>
+    </div>
+    <div class="heading-content" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+        <!-- Customer Information -->
+        <div class="info-table-container">
+            <table>
+                <caption>Customer Information</caption>
+                <tr><th>Name</th><td><input type="text" id="customerName"></td></tr>
+                <tr><th>Address</th><td><input type="text" id="customerAddress"></td></tr>
+                <tr><th>State</th><td><input type="text" id="customerState"></td></tr>
+                <tr><th>City</th><td><input type="text" id="customerCity"></td></tr>
+                <tr><th>Zip Code</th><td><input type="text" id="customerZip"></td></tr>
+            </table>
+        </div>
+        <!-- Labor Rates (Hourly) -->
+        <div class="info-table-container">
+            <table>
+                <caption>Labor Rates (Hourly)</caption>
+                <tr><th>Drains</th><td><input type="text" id="laborRateDrains"></td></tr>
+                <tr><th>Irrigation</th><td><input type="text" id="laborRateIrrigation"></td></tr>
+                <tr><th>Landscape</th><td><input type="text" id="laborRateLandscape"></td></tr>
+                <tr><th>Maintenance</th><td><input type="text" id="laborRateMaintenance"></td></tr>
+                <tr><th>Local Sales Tax (%)</th><td><input type="text" id="localSalesTax"></td></tr>
+            </table>
+        </div>
+        <!-- Project Details -->
+        <div class="info-table-container">
+            <table>
+                <caption>Project Details</caption>
+                <tr><th>Name</th><td><input type="text" id="projectName"></td></tr>
+                <tr><th>Address</th><td><input type="text" id="projectAddress"></td></tr>
+                <tr><th>State</th><td><input type="text" id="projectState"></td></tr>
+                <tr><th>City</th><td><input type="text" id="projectCity"></td></tr>
+                <tr><th>Zip Code</th><td><input type="text" id="projectZip"></td></tr>
+            </table>
+        </div>
+        <!-- Budget Section -->
+        <div class="info-table-container">
+            <table>
+                <caption>Budget</caption>
+                <tr><th>Drains</th><td id="budgetDrains">$0.00</td></tr>
+                <tr><th>Irrigation</th><td id="budgetIrrigation">$0.00</td></tr>
+                <tr><th>Landscape</th><td id="budgetLandscape">$0.00</td></tr>
+                <tr><th>Maintenance</th><td id="budgetMaintenance">$0.00</td></tr>
+                <tr><th>Total Budget</th><td id="totalBudget">$0.00</td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="Drains" class="tabcontent">
+    <h3>Drains</h3>
+    <div class="content-wrapper" id="drainsWrapper"></div>
+</div>
+
+<div id="Irrigation" class="tabcontent">
+    <h3>Irrigation</h3>
+    <div class="content-wrapper" id="irrigationWrapper"></div>
+</div>
+
+<div id="Landscape" class="tabcontent">
+    <h3>Landscape</h3>
+    <div class="content-wrapper" id="landscapeWrapper"></div>
+</div>
+
+<div id="Maintenance" class="tabcontent">
+    <h3>Maintenance</h3>
+    <div class="content-wrapper" id="maintenanceWrapper"></div>
+</div>
+
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+var inventory = [];
+var factors = [];
+
+// Modify the calculateCategoryTotal function to accept laborRate as a parameter
+function calculateCategoryTotal(wrapperId, laborRate) {
+    let materialTotal = 0;
+    let laborTotal = 0;
+    const itemsTable = document.getElementById(wrapperId).querySelector('.itemsTable tbody');
+    if(itemsTable) {
+        const lineCosts = itemsTable.querySelectorAll('.lineCost');
+        lineCosts.forEach(costElement => {
+            let costValue = parseFloat(costElement.textContent.replace('$', ''));
+            if (!isNaN(costValue)) {
+                materialTotal += costValue;
+            }
+        });
+        const laborHours = itemsTable.querySelectorAll('.laborHours');
+        laborHours.forEach(hoursElement => {
+            let hoursValue = parseFloat(hoursElement.textContent);
+            if (!isNaN(hoursValue)) {
+                laborTotal += hoursValue * laborRate; // Use the passed laborRate for calculation
+            }
+        });
+    }
+    return { materialTotal, laborTotal };
+}
+
+function updateBudgetTotals() {
+    // Fetch labor rates from the Heading tab
+    var laborRateDrains = parseFloat(document.getElementById('laborRateDrains').value) || 50; // Default to 50 if not set
+    var laborRateIrrigation = parseFloat(document.getElementById('laborRateIrrigation').value) || 50; // Default to 50 if not set
+    var laborRateLandscape = parseFloat(document.getElementById('laborRateLandscape').value) || 50; // Default to 50 if not set
+    var laborRateMaintenance = parseFloat(document.getElementById('laborRateMaintenance').value) || 50; // Default to 50 if not set
+    // Calculate total for each category using their specific labor rates
+    var drainsData = calculateCategoryTotal('drainsWrapper', laborRateDrains);
+    var irrigationData = calculateCategoryTotal('irrigationWrapper', laborRateIrrigation);
+    var landscapeData = calculateCategoryTotal('landscapeWrapper', laborRateLandscape);
+    var maintenanceData = calculateCategoryTotal('maintenanceWrapper', laborRateMaintenance);
+    // Update individual category totals in the Heading tab's Budget section
+    document.getElementById('budgetDrains').textContent = `Material: $${drainsData.materialTotal.toFixed(2)} | Labor: $${drainsData.laborTotal.toFixed(2)} | Total: $${(drainsData.materialTotal + drainsData.laborTotal).toFixed(2)}`;
+    document.getElementById('budgetIrrigation').textContent = `Material: $${irrigationData.materialTotal.toFixed(2)} | Labor: $${irrigationData.laborTotal.toFixed(2)} | Total: $${(irrigationData.materialTotal + irrigationData.laborTotal).toFixed(2)}`;
+    document.getElementById('budgetLandscape').textContent = `Material: $${landscapeData.materialTotal.toFixed(2)} | Labor: $${landscapeData.laborTotal.toFixed(2)} | Total: $${(landscapeData.materialTotal + landscapeData.laborTotal).toFixed(2)}`;
+    document.getElementById('budgetMaintenance').textContent = `Material: $${maintenanceData.materialTotal.toFixed(2)} | Labor: $${maintenanceData.laborTotal.toFixed(2)} | Total: $${(maintenanceData.materialTotal + maintenanceData.laborTotal).toFixed(2)}`;
+    // Calculate and update the total budget in the Heading tab
+    var totalMaterialBudget = drainsData.materialTotal + irrigationData.materialTotal + landscapeData.materialTotal + maintenanceData.materialTotal;
+    var totalLaborBudget = drainsData.laborTotal + irrigationData.laborTotal + landscapeData.laborTotal + maintenanceData.laborTotal;
+    var totalBudget = totalMaterialBudget + totalLaborBudget;
+    document.getElementById('totalBudget').textContent = `Material: $${totalMaterialBudget.toFixed(2)} | Labor: $${totalLaborBudget.toFixed(2)} | Total: $${totalBudget.toFixed(2)}`;
+}
+
+function fetchInventoryAndFactors() {
+    $.getJSON('/inventory', function(data) {
+        inventory = data;
+        console.log("Loaded Inventory:", inventory);
+        attachAutocomplete($('.partNumInput'), inventory);
+    }).fail(function() {
+        console.log("An error occurred while fetching the inventory.");
+    });
+
+    $.getJSON('/factors', function(data) {
+        factors = data;
+        console.log("Loaded Factors:", factors);
+        attachFactorAutocomplete($('.factorCodeInput'), factors);
+    }).fail(function() {
+        console.log("An error occurred while fetching the factors.");
+    });
+}
+
+// Define the attachAutocomplete function for part numbers
+function attachAutocomplete(selector, inventory) {
+    selector.autocomplete({
+        minLength: 0,
+        source: inventory.map(item => ({
+            label: item.PartNum + " - " + item.Description,
+            value: item.PartNum,
+            desc: item.Description,
+            cost: item.Cost
+        })),
+        select: function(event, ui) {
+            var tr = $(this).closest('tr');
+            tr.find('.description').text(ui.item.desc);
+            tr.find('.cost').text(`$${ui.item.cost}`);
+            var quantity = parseInt(tr.find('.quantity').val()) || 0;
+            var lineCost = quantity * ui.item.cost;
+            tr.find('.lineCost').text(`$${lineCost.toFixed(2)}`);
+            updateTotalCost(tr.closest('.content-wrapper'));
+        }
+    }).focus(function() {
+        $(this).autocomplete("search", $(this).val());
+    });
+}
+
+// Define the attachFactorAutocomplete function for factor codes
+function attachFactorAutocomplete(selector, factors) {
+    selector.autocomplete({
+        minLength: 0,
+        source: factors.map(factor => ({
+            label: `${factor.Factor_ID} - ${factor.Description}`,
+            value: factor.Factor_ID
+        })),
+        select: function(event, ui) {
+            const selectedFactor = factors.find(factor => factor.Factor_ID.toString().trim() === ui.item.value.toString().trim());
+
+            if (selectedFactor && selectedFactor.hasOwnProperty('Labor Hours')) {
+                const laborHours = selectedFactor['Labor Hours'];
+                $(this).closest('tr').find('.laborHours').text(laborHours.toFixed(2));
+            } else {
+                $(this).closest('tr').find('.laborHours').text("0.00");
+            }
+        }
+    }).focus(function() {
+        $(this).autocomplete("search", $(this).val());
+    });
+}
+
+function openCategory(evt, categoryName) {
+    var i, tabcontent, tablinks;
+    // Get all elements with class="tabcontent" and hide them
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+    }
+    // Get all elements with class="tablinks" and remove the class "active"
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    // Show the current tab, and add an "active" class to the button that opened the tab
+    document.getElementById(categoryName).style.display = "block";
+    evt.currentTarget.className += " active";
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    // Set the bid date to today's date
+    document.getElementById('bidDate').value = new Date().toLocaleDateString();
+
+    // Initialization code for fetching inventory, factors, and setting up tables
+    fetchInventoryAndFactors();
+    initializeTable('drainsWrapper');
+    initializeTable('irrigationWrapper');
+    initializeTable('landscapeWrapper');
+    initializeTable('maintenanceWrapper');
+
+    // Automatically open the first tab
+    document.querySelector(".tablinks").click();
+
+    // Attach event listeners to labor rate inputs for dynamic updates
+    document.getElementById('laborRateDrains').addEventListener('input', function() {
+        updateTotalsBasedOnLaborRateChange('drainsWrapper', parseFloat(this.value) || 50);
+    });
+
+    document.getElementById('laborRateIrrigation').addEventListener('input', function() {
+        updateTotalsBasedOnLaborRateChange('irrigationWrapper', parseFloat(this.value) || 50);
+    });
+
+    document.getElementById('laborRateLandscape').addEventListener('input', function() {
+        updateTotalsBasedOnLaborRateChange('landscapeWrapper', parseFloat(this.value) || 50);
+    });
+
+    document.getElementById('laborRateMaintenance').addEventListener('input', function() {
+        updateTotalsBasedOnLaborRateChange('maintenanceWrapper', parseFloat(this.value) || 50);
+    });
+});
+
+document.getElementById('saveCloseBtn').addEventListener('click', function() {
+    var bidData = {
+        name: document.getElementById('bidJobId').value, // Assuming 'bidJobId' is the input for the bid's name
+        customer: {
+            name: document.getElementById('customerName').value,
+            address: document.getElementById('customerAddress').value,
+            state: document.getElementById('customerState').value,
+            city: document.getElementById('customerCity').value,
+            zip_code: document.getElementById('customerZip').value,
+        },
+        project: {
+            name: document.getElementById('projectName').value,
+            address: document.getElementById('projectAddress').value,
+            state: document.getElementById('projectState').value,
+            city: document.getElementById('projectCity').value,
+            zip_code: document.getElementById('projectZip').value,
+        },
+        // Add any additional fields as necessary
+    };
+
+    fetch('/save-bid', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bidData),
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Success:', data);
+        alert('Bid saved successfully!');
+        // Handle successful save here, such as redirecting to another page
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+        alert('Error saving bid');
+    });
+});
+
+function updateTotalsBasedOnLaborRateChange(wrapperId, newLaborRate) {
+    // Recalculate the category total with the new labor rate
+    var categoryData = calculateCategoryTotal(wrapperId, newLaborRate);
+    
+    // Update the category total on its respective tab
+    updateTotalCost($('#' + wrapperId));
+
+    // Update the Budget section in the Heading tab
+    updateBudgetTotals();
+}
+
+// Initialize table function
+function initializeTable(wrapperId) {
+    var contentWrapper = $('#' + wrapperId);
+    var tableHTML = `
+        <div class="action-buttons">
+            <button onclick="addBlankLineItem('${wrapperId}')" class="addBtn">Add Line Item</button>
+            <button onclick="insertBlankLineItem('${wrapperId}')" class="insertBtn">Insert Line Item</button>
+        </div>
+        <div class="table-container">
+            <table class="itemsTable">
+                <thead>
+                    <tr>
+                        <th class="lineNumber">Line Number</th>
+                        <th class="partNumber">Part Number</th>
+                        <th class="description">Description</th>
+                        <th class="factorCode">Factor Code</th>
+                        <th class="quantity">Quantity</th>
+                        <th class="cost">Cost</th>
+                        <th class="lineCost">Line Cost</th>
+                        <th class="laborHours">Labor Hours</th>
+                        <th class="action">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dynamic content will be appended here -->
+                </tbody>
+            </table>
+        </div>
+        <div class="additional-description-container">
+            <label for="additionalDescription">Additional Description:</label>
+            <input type="text" id="additionalDescription" class="additionalDescription" style="width: 100%; max-width: 500px;">
+        </div>
+        <div class="total-cost">
+            <h2>Material Cost: <span class="totalMaterialCost">$0.00</span></h2>
+            <h2>Labor Cost: <span class="totalLaborCost">$0.00</span></h2>
+            <h2>Total Cost: <span class="totalCost">$0.00</span></h2>
+        </div>`;
+    contentWrapper.html(tableHTML);
+    attachEventHandlers(contentWrapper);
+}
+
+// Attach event handlers function
+function attachEventHandlers(contentWrapper) {
+    contentWrapper.on('click', '.itemsTable tbody tr', function(event) {
+        if (!$(event.target).is('input, button')) {
+            contentWrapper.find('.itemsTable tbody tr').removeClass('selected');
+            $(this).addClass('selected');
+            var additionalDescription = $(this).data('additionalDescription') || '';
+            $('#additionalDescription').val(additionalDescription);
+        }
+    });
+
+    $('#additionalDescription').change(function() {
+        var additionalDescription = $(this).val();
+        contentWrapper.find('.itemsTable tbody tr.selected').data('additionalDescription', additionalDescription);
+    });
+
+    contentWrapper.on('click', '.removeBtn', function() {
+        var isConfirmed = window.confirm("Are you sure you want to remove this item?");
+        if (isConfirmed) {
+            var tr = $(this).closest('tr');
+            tr.remove();
+            updateLineNumbers(contentWrapper);
+            updateTotalCost(contentWrapper);
+            $('#additionalDescription').val('');
+        }
+    });
+}
+
+
+// Insert blank line item function
+function insertBlankLineItem(wrapperId) {
+    var lineNum = prompt("Enter the line number after which you want to insert a new line item:");
+    if (!lineNum || isNaN(lineNum) || parseInt(lineNum) < 1) {
+        alert("Please enter a valid line number.");
+        return;
+    }
+    lineNum = parseInt(lineNum);
+
+    var contentWrapper = $('#' + wrapperId);
+    var itemsTableBody = contentWrapper.find(".itemsTable tbody");
+    var existingRows = itemsTableBody.find('tr').length;
+
+    if (lineNum > existingRows) {
+        alert("Line number exceeds the current number of items. Adding at the end.");
+        addBlankLineItem(wrapperId);
+    } else {
+        var newRowHtml = getTableRow(lineNum + 1);
+        $(newRowHtml).insertAfter(itemsTableBody.find("tr").eq(lineNum - 1));
+        reinitializeAutocompleteForAll(contentWrapper);
+        updateLineNumbers(contentWrapper);
+        updateTotalCost(contentWrapper);
+    }
+}
+
+// Reinitialize autocomplete for all function
+function reinitializeAutocompleteForAll(contentWrapper) {
+    var partNumInputs = contentWrapper.find('.partNumInput');
+    var factorCodeInputs = contentWrapper.find('.factorCodeInput');
+
+    partNumInputs.each(function() {
+        attachAutocomplete($(this), inventory);
+    });
+
+    factorCodeInputs.each(function() {
+        attachFactorAutocomplete($(this), factors);
+    });
+}
+
+// Add blank line item function
+function addBlankLineItem(wrapperId) {
+    var contentWrapper = $('#' + wrapperId);
+    var itemsTableBody = contentWrapper.find(".itemsTable tbody");
+    var rowNum = itemsTableBody.children().length + 1;
+    var newRowHtml = getTableRow(rowNum);
+    itemsTableBody.append(newRowHtml);
+    attachAutocomplete(contentWrapper.find('.partNumInput').last(), inventory);
+    attachFactorAutocomplete(contentWrapper.find('.factorCodeInput').last(), factors);
+    updateTotalCost(contentWrapper);
+    updateBudgetTotals(); // Update budget totals after adding a line item
+}
+
+function getTableRow(rowNum) {
+    return `
+        <tr data-line-number="${rowNum}">
+            <td class="lineNumber">${rowNum}</td>
+            <td class="partNumber"><input type='text' class='partNumInput' autocomplete='off'></td>
+            <td class="description"></td> <!-- Removed the hardcoded description -->
+            <td class="factorCode"><input type='text' class='factorCodeInput' autocomplete='off'></td> <!-- Cleared the value -->
+            <td class="quantity"><input type='number' class='quantity' value='' oninput='updateLineAndTotalCosts(this)'></td> <!-- Cleared the default quantity -->
+            <td class="cost">$0.00</td> <!-- Set default cost to $0.00 -->
+            <td class="lineCost">$0.00</td> <!-- Set default line cost to $0.00 -->
+            <td class="laborHours">0</td> <!-- Set default labor hours to 0 -->
+            <td class="action"><button class='removeBtn' onclick='removeLineItem(this)'>Remove</button></td>
+        </tr>`;
+}
+
+
+// Update line and total costs function
+function updateLineAndTotalCosts(inputElement) {
+    var tr = $(inputElement).closest('tr');
+    var quantity = parseInt($(inputElement).val()) || 0;
+    var cost = parseFloat(tr.find('.cost').text().replace('$', '')) || 0;
+    var lineCost = quantity * cost;
+    tr.find('.lineCost').text(`$${lineCost.toFixed(2)}`);
+    updateTotalCost(tr.closest('.content-wrapper'));
+    updateBudgetTotals(); // Call to update budget totals after any change
+}
+
+function updateTotalCost(contentWrapper) {
+    var totalMaterialCost = 0;
+    var totalLaborCost = 0;
+    // Fetch labor rates from the Heading tab
+    var laborRateDrains = parseFloat(document.getElementById('laborRateDrains').value) || 50; // Default to 50 if not set
+    var laborRateIrrigation = parseFloat(document.getElementById('laborRateIrrigation').value) || 50; // Default to 50 if not set
+    var laborRateLandscape = parseFloat(document.getElementById('laborRateLandscape').value) || 50; // Default to 50 if not set
+    var laborRateMaintenance = parseFloat(document.getElementById('laborRateMaintenance').value) || 50; // Default to 50 if not set
+    // Determine which category we're working with and set the appropriate labor rate
+    var laborRate = 50; // Default value
+    if (contentWrapper.is('#drainsWrapper')) {
+        laborRate = laborRateDrains;
+    } else if (contentWrapper.is('#irrigationWrapper')) {
+        laborRate = laborRateIrrigation;
+    } else if (contentWrapper.is('#landscapeWrapper')) {
+        laborRate = laborRateLandscape;
+    } else if (contentWrapper.is('#maintenanceWrapper')) {
+        laborRate = laborRateMaintenance;
+    }
+    contentWrapper.find(".itemsTable tbody tr").each(function() {
+        var lineCost = parseFloat($(this).find('.lineCost').text().replace('$', '')) || 0;
+        totalMaterialCost += lineCost;
+        var laborHours = parseFloat($(this).find('.laborHours').text()) || 0;
+        totalLaborCost += laborHours * laborRate;
+    });
+    // Set the total costs for material, labor, and overall total
+    var totalCostContainer = contentWrapper.find(".total-cost");
+    totalCostContainer.find(".totalMaterialCost").text(`$${totalMaterialCost.toFixed(2)}`);
+    totalCostContainer.find(".totalLaborCost").text(`$${totalLaborCost.toFixed(2)}`);
+    var overallTotalCost = totalMaterialCost + totalLaborCost;
+    totalCostContainer.find(".totalCost").text(`$${overallTotalCost.toFixed(2)}`);
+    updateBudgetTotals(); // Update budget totals after updating total cost
+}
+// Remove line item function
+function removeLineItem(button) {
+    var isConfirmed = window.confirm("Are you sure you want to remove this item?");
+    if (isConfirmed) {
+        var tr = $(button).closest('tr');
+        var contentWrapper = tr.closest('.content-wrapper');
+        tr.remove();
+        updateLineNumbers(contentWrapper);
+        updateTotalCost(contentWrapper);
+        updateBudgetTotals(); // Update budget totals after adding a line item
+    }
+}
+
+// Update line numbers function
+function updateLineNumbers(contentWrapper) {
+    var lineNumber = 1;
+    contentWrapper.find(".itemsTable tbody tr").each(function() {
+        $(this).find("td:first").text(lineNumber++);
+    });
+}
+
+// Update labor hours function
+function updateLaborHours(selectElement) {
+    var selectedFactorId = $(selectElement).val();
+    var factor = factors.find(f => f.Factor_ID == selectedFactorId);
+    var laborHoursCell = $(selectElement).closest('tr').find('.laborHours');
+    if (factor) {
+        laborHoursCell.text(factor.Labor_Hours);
+    } else {
+        laborHoursCell.text('0');
+    }
+}
+</script>
+</body>
+</html>

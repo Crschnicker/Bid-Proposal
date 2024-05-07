@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add or Update Bid</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Add/Update Bid</h1>
+    <form id="bidForm" action="" method="post">
+        <div>
+            <input type="checkbox" id="updateExistingBid" name="updateExistingBid">
+            <label for="updateExistingBid">Update Existing Bid</label>
+        </div>
+        <div id="bidNameContainer">
+            <label for="BidName">Bid Name:</label>
+            <input type="text" id="BidName" name="BidName" required>
+            <button type="button" id="checkBid">Check Bid</button>
+        </div>
+        <!-- Additional form fields for bid details -->
+        <br>
+        <input type="submit" id="submitForm" value="Submit">
+    </form>
+
+    <script>
+        $(document).ready(function() {
+            $('#bidForm').on('submit', function(e) {
+                // Prevent the default form submission
+                e.preventDefault();
+        
+                var bidName = $('#BidName').val();
+                var updateExisting = $('#updateExistingBid').is(':checked');
+                var formData = new FormData(this);
+        
+                // Decide whether to create a new bid or update an existing one
+                var formAction = updateExisting ? '/update-bid' : '/create-bid';
+        
+                // Add additional form data as needed
+                formData.append('bidName', bidName);
+                formData.append('updateExisting', updateExisting);
+        
+                // Submit the form data to the correct Flask route
+                $.ajax({
+                    url: formAction,
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        // Redirect to the Bid_Job_Estimating.html page on success
+                        window.location.href = '/bid-job-estimating';
+                    },
+                    error: function(xhr, status, error) {
+                        // Handle any errors
+                        alert("An error occurred: " + error);
+                    }
+                });
+            });
+            $('#checkBid').click(function() {
+                var bidName = $('#BidName').val();
+                var updateExisting = $('#updateExistingBid').is(':checked');
+
+                $.ajax({
+                    url: '/check-bid',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ bidName: bidName, updateExisting: updateExisting }),
+                    success: function(data) {
+                        if (data.exists && updateExisting) {
+                            // Fill out the form with the bid details for updating
+                            // Assuming data.details contains the bid details
+                            autofillForm(data.details);
+                        } else if (!data.exists && !updateExisting) {
+                            alert("This will be a new bid.");
+                            // Optionally clear form or take other actions
+                        } else if (data.exists && !updateExisting) {
+                            alert("Bid name already exists. Check 'Update Existing Bid' to update.");
+                        } else {
+                            alert("Bid does not exist. Enter a new bid name or check the name again.");
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        // Handle errors
+                        alert("An error occurred: " + error);
+                    }
+                });
+            });
+
+            function autofillForm(details) {
+                // Example of autofilling bid details
+                $('#customerName').val(details.customerName);
+                $('#customerAddress').val(details.customerAddress);
+                $('#customerState').val(details.customerState);
+                $('#customerCity').val(details.customerCity);
+                $('#customerZip').val(details.customerZip);
+                $('#projectName').val(details.projectName);
+                $('#projectAddress').val(details.projectAddress);
+                $('#projectState').val(details.projectState);
+                $('#projectCity').val(details.projectCity);
+                $('#projectZip').val(details.projectZip);
+                // Continue for other fields as necessary
+            }
+
+            // Modify the form's submit behavior as needed
+        });
+    </script>
+</body>
+</html>

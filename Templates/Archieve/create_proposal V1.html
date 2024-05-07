@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Proposal Generation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Open Sans', sans-serif;
+            text-align: center;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            background-color: #e7f0fa;
+            border: 1px solid #007bff;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 17px;
+            color: #007bff;
+        }
+        .tab button:hover, .tab button.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #007bff;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .tabcontent.active {
+            display: block;
+        }
+        .info-section {
+            margin-bottom: 20px;
+        }
+        .info-section table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .info-section th, .info-section td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #007bff;
+        }
+        .info-section input[type="text"], 
+        .info-section input[type="number"] {
+            width: 95%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .heading-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="tab">
+    <button class="tablinks" onclick="openTab(event, 'Heading')" class="active">Heading</button>
+    <button class="tablinks" onclick="openTab(event, 'Options')">Options</button>
+    <button class="tablinks" onclick="openTab(event, 'SpecialNotes')">Special Notes</button>
+    <button class="tablinks" onclick="openTab(event, 'TermsConditions')">Terms/Conditions</button>
+</div>
+
+<div id="Heading" class="tabcontent active">
+    <!-- Customer Information Section -->
+    <div class="info-section">
+        <h3>Customer Information</h3>
+        <table>
+            <tr><th>Name</th><td><input type="text" id="customerName"></td></tr>
+            <tr><th>Contact Name</th><td><input type="text" id="contactName"></td></tr>
+            <tr><th>Address</th><td><input type="text" id="customerAddress"></td></tr>
+            <tr><th>City</th><td><input type="text" id="customerCity"></td></tr>
+            <tr><th>State</th><td><input type="text" id="customerState"></td></tr>
+            <tr><th>Zip Code</th><td><input type="text" id="customerZip"></td></tr>
+            <tr><th>Phone</th><td><input type="text" id="customerPhone"></td></tr>
+            <tr><th>Fax</th><td><input type="text" id="customerFax"></td></tr>
+        </table>
+    </div>
+    
+    <!-- Architect Section -->
+    <div class="info-section">
+        <h3>Architect</h3>
+        <table>
+            <tr><th>Name</th><td><input type="text" id="architectName"></td></tr>
+            <tr><th>Specifications</th><td><input type="text" id="architectSpecifications"></td></tr>
+            <tr><th>Dated</th><td><input type="text" id="architectDated"></td></tr>
+            <tr><th>Sheets</th><td><input type="text" id="architectSheets"></td></tr>
+        </table>
+    </div>
+    
+    <!-- Job Section -->
+    <div class="info-section">
+        <h3>Job</h3>
+        <table>
+            <tr><th>Name</th><td><input type="text" id="jobName"></td></tr>
+            <tr><th>City</th><td><input type="text" id="jobCity"></td></tr>
+            <tr><th>Proposal Total</th><td><input type="number" id="proposalTotal"></td></tr>
+            <tr><th>Revision Number</th><td><input type="text" id="revisionNumber"></td></tr>
+        </table>
+    </div>
+    
+    <!-- Engineer Section -->
+    <div class="info-section">
+        <h3>Engineer</h3>
+        <table>
+            <tr><th>Name</th><td><input type="text" id="engineerName"></td></tr>
+            <tr><th>Specifications</th><td><input type="text" id="engineerSpecifications"></td></tr>
+            <tr><th>Dated</th><td><input type="text" id="engineerDated"></td></tr>
+            <tr><th>Sheets</th><td><input type="text" id="engineerSheets"></td></tr>
+        </table>
+    </div>
+</div>
+
+
+
+<div id="Options" class="tabcontent">
+    <h3>Options</h3>
+    <!-- Dynamically added option fields will go here -->
+</div>
+
+<div id="SpecialNotes" class="tabcontent">
+    <h3>Special Notes</h3>
+    <textarea id="specialNotes" rows="4"></textarea>
+</div>
+
+<div id="TermsConditions" class="tabcontent">
+    <h3>Terms/Conditions</h3>
+    <!-- Terms and conditions inputs will go here -->
+</div>
+
+<script>
+    function openTab(evt, tabName) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tablinks");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+    }
+    
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelector(".tablinks.active").click(); // This will open the 'Heading' tab by default
+    });
+    </script>
+    
+    </body>
+    </html>

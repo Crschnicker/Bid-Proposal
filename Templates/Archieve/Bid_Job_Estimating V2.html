@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Comprehensive Management</title>
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .tab { overflow: hidden; border: 1px solid #007bff; /* Blue border to match button color */ background-color: #e7f0fa; /* Light blue background */ }
+        .tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 17px; color: #007bff; /* Blue text to match button color */ }
+        .tab button:hover { background-color: #d1e5f1; /* Slightly darker blue on hover */ }
+        .tab button.active { background-color: #007bff; color: white; /* Active tab has white text on blue background */ }
+        .tabcontent { display: none; padding: 6px 12px; border: 1px solid #007bff; border-top: none; background-color: #f1f9ff; /* Light background for content to match theme */ }
+        .content-wrapper { margin: auto; max-width: 80%; }
+        .table-container { overflow-x: auto; margin-top: 20px; }
+        table { margin: auto; border-collapse: collapse; width: 100%; table-layout: auto; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; overflow: hidden; white-space: nowrap; }
+        input[type='text'], input[type='number'] { font-size: 1rem; padding: .5rem; }
+        .action-buttons, .total-cost { margin-top: 20px; }
+        button { cursor: pointer; margin-right: 10px; padding: 10px 20px; font-size: 16px; border: none; border-radius: 5px; background-color: #007bff; color: white; transition: background-color 0.3s; }
+        button:hover { background-color: #0056b3; }
+        .additional-description-container { margin-top: 20px; text-align: center; }
+        .additionalDescription { padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ddd; width: 100%; max-width: 500px; }
+        .itemsTable tbody tr.selected { background-color: #add8e6; }
+    </style>
+</head>
+<body>
+
+<div class="tab">
+  <button class="tablinks" onclick="openCategory(event, 'Drains')">Drains</button>
+  <button class="tablinks" onclick="openCategory(event, 'Irrigation')">Irrigation</button>
+  <button class="tablinks" onclick="openCategory(event, 'Landscape')">Landscape</button>
+</div>
+
+<div id="Drains" class="tabcontent">
+  <h3>Drains</h3>
+  <div class="content-wrapper" id="drainsWrapper"></div>
+</div>
+
+<div id="Irrigation" class="tabcontent">
+  <h3>Irrigation</h3>
+  <div class="content-wrapper" id="irrigationWrapper"></div>
+</div>
+
+<div id="Landscape" class="tabcontent">
+  <h3>Landscape</h3>
+  <div class="content-wrapper" id="landscapeWrapper"></div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+var inventory = [];
+
+function fetchInventory() {
+  $.getJSON('/inventory', function(data) {
+    inventory = data;
+    attachAutocomplete($('.partNumInput'), inventory); // Attach autocomplete after fetching
+  }).fail(function() {
+    console.log("An error occurred while fetching the inventory.");
+  });
+}
+
+function openCategory(evt, categoryName) {
+  var tabcontent = document.getElementsByClassName("tabcontent");
+  var tablinks = document.getElementsByClassName("tablinks");
+  for (var i = 0; i < tabcontent.length; i++) {
+    tabcontent[i].style.display = "none";
+    tablinks[i].className = tablinks[i].className.replace(" active", "");
+  }
+  document.getElementById(categoryName).style.display = "block";
+  evt.currentTarget.className += " active";
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelector(".tablinks").click();
+  initializeTable('drainsWrapper');
+  initializeTable('irrigationWrapper');
+  initializeTable('landscapeWrapper');
+  fetchInventory(); // Fetch inventory once DOM is fully loaded
+});
+
+function initializeTable(wrapperId) {
+  var contentWrapper = $('#' + wrapperId);
+  var tableHTML = `
+    <div class="action-buttons">
+      <button class="addBtn">Add Line Item</button>
+      <button class="insertBtn">Insert Line Item</button>
+    </div>
+    <div class="table-container">
+      <table class="itemsTable">
+        <thead>
+          <tr>
+            <th>Line Number</th>
+            <th>Part Number</th>
+            <th>Description</th>
+            <th>Factor Code</th>
+            <th>Quantity</th>
+            <th>Cost</th>
+            <th>Line Cost</th> <!-- New Column for Line Cost -->
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Dynamic content will be appended here -->
+        </tbody>
+      </table>
+    </div>
+    <div class="additional-description-container">
+      <label for="additionalDescription">Additional Description:</label>
+      <input type="text" class="additionalDescription" style="width: 100%; max-width: 500px;">
+    </div>
+    <div class="total-cost">
+      <h2>Total Cost: <span class="totalCost">$0.00</span></h2>
+    </div>`;
+  contentWrapper.html(tableHTML);
+
+  // Initialize event handlers for buttons and other elements
+  attachEventHandlers(contentWrapper);
+}
+
+function attachEventHandlers(contentWrapper) {
+  contentWrapper.find('.addBtn').click(function() {
+    addBlankLineItem(contentWrapper, undefined);
+  });
+
+  contentWrapper.find('.insertBtn').click(function() {
+    var lineNum = prompt("Enter the line number after which you want to insert a new line:", "");
+    lineNum = parseInt(lineNum);
+    if (!isNaN(lineNum) && lineNum >= 1 && lineNum <= contentWrapper.find(".itemsTable tbody tr").length) {
+      addBlankLineItem(contentWrapper, lineNum);
+    } else {
+      alert("Invalid line number. Please enter a valid line number.");
+    }
+  });
+
+  contentWrapper.on('click', '.itemsTable tbody tr', function(event) {
+    if (!$(event.target).is('input, button')) {
+      contentWrapper.find(".itemsTable tbody tr.selected").removeClass('selected');
+      $(this).addClass('selected');
+      contentWrapper.find('.additionalDescription').val($(this).data('additionalDescription'));
+    }
+  });
+
+  contentWrapper.find('.additionalDescription').change(function() {
+    var additionalDescription = $(this).val();
+    contentWrapper.find(".itemsTable tbody tr.selected").data('additionalDescription', additionalDescription);
+  });
+}
+
+function addBlankLineItem(contentWrapper, lineNum) {
+  var itemsTableBody = contentWrapper.find(".itemsTable tbody");
+  var rowNum = itemsTableBody.children().length + 1;
+  var newRowHtml = getTableRow(rowNum);
+  var newRow = $(newRowHtml).appendTo(itemsTableBody);
+
+  // Attach autocomplete to the new part number input
+  attachAutocomplete(newRow.find('.partNumInput'), inventory);
+
+  if (lineNum !== undefined) {
+    var actualRowNum = Math.min(lineNum, itemsTableBody.children().length) - 1;
+    newRow.insertAfter(itemsTableBody.find("tr").eq(actualRowNum));
+  }
+
+  updateLineNumbers(contentWrapper);
+  updateTotalCost(contentWrapper);
+}
+
+function getTableRow(rowNum) {
+  return `
+    <tr data-line-number="${rowNum}" data-additional-description="">
+      <td class='line-number'>${rowNum}</td>
+      <td><input type='text' class='partNumInput input-large'></td>
+      <td class='description'></td>
+      <td class='factorCode'></td>
+      <td><input type='number' class='quantity input-large' value='1' onchange='updateLineAndTotalCosts(this)'></td>
+      <td class='cost input-large'>$0.00</td>
+      <td class='lineCost'>$0.00</td> <!-- New Cell for Line Cost -->
+      <td><button class='removeBtn' onclick='removeLineItem(this)'>Remove</button></td>
+    </tr>`;
+}
+
+function updateLineNumbers(contentWrapper) {
+  contentWrapper.find(".itemsTable tbody tr").each(function(index) {
+    $(this).find("td.line-number").text(index + 1);
+  });
+}
+
+function updateTotalCost(contentWrapper) {
+  var totalCost = 0;
+  contentWrapper.find(".itemsTable tbody tr").each(function() {
+    var lineCost = parseFloat($(this).find('.lineCost').text().replace('$', '')) || 0;
+    totalCost += lineCost;
+  });
+  contentWrapper.find(".totalCost").text(`$${totalCost.toFixed(2)}`);
+}
+
+
+function removeLineItem(button) {
+  var tr = $(button).closest('tr');
+  var contentWrapper = tr.closest('.content-wrapper');
+  tr.remove();
+  updateLineNumbers(contentWrapper);
+  updateTotalCost(contentWrapper);
+}
+
+function updateLineAndTotalCosts(input) {
+  var tr = $(input).closest('tr');
+  var quantity = parseInt($(input).val()) || 0;
+  var costPerItem = parseFloat(tr.find('.cost').text().replace('$', '')) || 0;
+  var lineCost = quantity * costPerItem;
+  tr.find('.lineCost').text(`$${lineCost.toFixed(2)}`);
+  updateTotalCost(tr.closest('.content-wrapper'));
+}
+
+
+function attachAutocomplete(selector, inventory) {
+  selector.autocomplete({
+    minLength: 0,
+    source: inventory.map(item => ({
+      label: item.PartNum + " - " + item.Description,
+      value: item.PartNum,
+      desc: item.Description,
+      cost: item.Cost
+    })),
+    select: function(event, ui) {
+      var tr = $(this).closest('tr');
+      tr.find('.description').text(ui.item.desc);
+      tr.find('.cost').text(`$${ui.item.cost}`);
+      var quantity = parseInt(tr.find('.quantity').val()) || 0;
+      var lineCost = quantity * ui.item.cost;
+      tr.find('.lineCost').text(`$${lineCost.toFixed(2)}`);
+      updateTotalCost(tr.closest('.content-wrapper'));
+    }
+  }).focus(function() {
+    $(this).autocomplete("search", $(this).val());
+  });
+}
+
+</script>
+</body>
+</html>
