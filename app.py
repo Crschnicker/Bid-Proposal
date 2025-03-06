@@ -515,6 +515,38 @@ class SubBidItem(db.Model):
     line_ext_cost = db.Column(db.Float)
     sub_bid = db.relationship('SubBid', back_populates='items')
 
+class BidAdjustment(db.Model):
+    __tablename__ = 'bid_adjustments'
+    id = db.Column(db.Integer, primary_key=True)
+    bid_id = db.Column(db.String, db.ForeignKey('bid.bid_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    section = db.Column(db.String(50), nullable=False)  # Drains, Irrigation, etc.
+    type = db.Column(db.String(50), nullable=False)     # Materials or Labor
+    direction = db.Column(db.String(20), nullable=False) # increase or decrease
+    percentage = db.Column(db.Float, nullable=False)
+    original_values = db.Column(db.Text)  # JSON string of original values for undo
+    is_active = db.Column(db.Boolean, default=True)  # To mark if undone
+    
+    bid = db.relationship('Bid', backref=db.backref('adjustments', lazy=True))
+    user = db.relationship('User', backref=db.backref('adjustments', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'bid_id': self.bid_id,
+            'user': {
+                'id': self.user_id,
+                'username': self.user.username if self.user else "Unknown User"
+            },
+            'timestamp': self.timestamp.isoformat(),
+            'section': self.section,
+            'type': self.type,
+            'direction': self.direction,
+            'percentage': self.percentage,
+            'is_active': self.is_active
+        }
+
 
 class Tax(db.Model):
     __tablename__ = 'tax'
@@ -869,6 +901,77 @@ def staff_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@app.route('/api/adjustments/<bid_id>', methods=['GET'])
+@login_required
+def get_adjustments(bid_id):
+    """Get adjustment history for a bid"""
+    try:
+        # Add a check if the BidAdjustment class is defined
+        if 'BidAdjustment' not in globals():
+            return jsonify([]), 200  # Return empty array if model doesn't exist yet
+            
+        adjustments = BidAdjustment.query.filter_by(bid_id=bid_id).order_by(BidAdjustment.timestamp.desc()).all()
+        return jsonify([adj.to_dict() for adj in adjustments])
+    except Exception as e:
+        app.logger.error(f"Error fetching adjustments: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/adjustments', methods=['POST'])
+@login_required
+def create_adjustment():
+    """Create a new adjustment record"""
+    try:
+        data = request.json
+        
+        # Validate input
+        required_fields = ['bid_id', 'section', 'type', 'direction', 'percentage', 'original_values']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        adjustment = BidAdjustment(
+            bid_id=data['bid_id'],
+            user_id=current_user.id,
+            section=data['section'],
+            type=data['type'],
+            direction=data['direction'],
+            percentage=data['percentage'],
+            original_values=json.dumps(data['original_values'])
+        )
+        
+        db.session.add(adjustment)
+        db.session.commit()
+        
+        return jsonify(adjustment.to_dict()), 201
+    except Exception as e:
+        app.logger.error(f"Error creating adjustment: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/adjustments/<int:adjustment_id>/undo', methods=['POST'])
+@login_required
+def undo_adjustment(adjustment_id):
+    """Undo an adjustment by ID"""
+    try:
+        adjustment = BidAdjustment.query.get_or_404(adjustment_id)
+        
+        # Only the user who made the adjustment or an admin can undo it
+        if adjustment.user_id != current_user.id and not current_user.is_admin:
+            return jsonify({"error": "Unauthorized to undo this adjustment"}), 403
+        
+        # Mark adjustment as inactive/undone
+        adjustment.is_active = False
+        db.session.commit()
+        
+        # Return the original values for client-side reversion
+        return jsonify({
+            'success': True,
+            'adjustment_id': adjustment.id,
+            'original_values': json.loads(adjustment.original_values)
+        })
+    except Exception as e:
+        app.logger.error(f"Error undoing adjustment: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))

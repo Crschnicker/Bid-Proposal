@@ -18,8 +18,6 @@
     <!-- Include Bootstrap JS -->
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.6.0/js/bootstrap.bundle.min.js"></script>
 
-
-    <script src="/static/js/adjustment-tracking.js"></script>
     <!-- Other scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -179,6 +177,80 @@
             flex-direction: column;
             gap: 20px;
         }
+
+        /* Styles for adjustment history and notifications */
+        .adjustment-history-container {
+            margin-top: 30px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #adjustmentHistoryTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        #adjustmentHistoryTable th,
+        #adjustmentHistoryTable td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        #adjustmentHistoryTable th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        #adjustmentHistoryTable tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .undo-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .undo-btn:hover {
+            background-color: #c82333;
+        }
+
+        /* Notification styles */
+        .notification {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+
+        .notification.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .notification.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .notification.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
 
         .percentage-container {
             text-align: center;
@@ -1304,7 +1376,7 @@
                         </label>
                     </div>
                 </div>
-    
+        
                 <div class="adjustment-section">
                     <div class="section-title">Adjustment Type:</div>
                     <div class="radio-group" id="typeGroup">
@@ -1318,7 +1390,7 @@
                         </label>
                     </div>
                 </div>
-    
+        
                 <div class="adjustment-section">
                     <div class="section-title">Direction:</div>
                     <div class="radio-group" id="directionGroup">
@@ -1333,7 +1405,7 @@
                     </div>
                 </div>
             </div>
-    
+        
             <div class="results-section">
                 <div class="percentage-container">
                     <div class="section-title">Adjustment Percentage:</div>
@@ -1342,7 +1414,7 @@
                                min="0" max="100" step="0.1" placeholder="Enter %">
                     </div>
                 </div>
-    
+        
                 <table class="results-table">
                     <thead>
                         <tr>
@@ -1364,13 +1436,35 @@
                         </tr>
                     </tbody>
                 </table>
-    
+        
+                <!-- Make sure this button ID is correct -->
                 <button id="applyAdjustment" class="submit-btn" disabled>
                     Apply Adjustment
                 </button>
             </div>
         </div>
-    </div>    
+        
+        <!-- Add the history section -->
+        <div class="adjustment-history-container">
+            <h4>Adjustment History</h4>
+            <table id="adjustmentHistoryTable" class="results-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Section</th>
+                        <th>Type</th>
+                        <th>Direction</th>
+                        <th>Percentage</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Adjustment history rows will be dynamically added here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
     
     <div id="drainsSubBidModal" class="modal">
         <div class="modal-content">
@@ -6597,117 +6691,190 @@ function editSubBid(subBidId, category) {
 
     (function(window, $) {
     // Adjustment Tracking Module
+    // Enhanced AdjustmentTracker class
     class AdjustmentTracker {
         constructor() {
-            // Load existing history from localStorage
+            // Get bid ID from the page
+            this.bidId = document.getElementById('bidId').value;
+            
+            // Load existing history from the server
             this.loadHistory();
         }
 
-        // Load adjustment history from localStorage
+        // Updated loadHistory method with better error handling
         loadHistory() {
-            const storedHistory = localStorage.getItem('bidAdjustmentHistory');
-            this.adjustmentHistory = storedHistory ? JSON.parse(storedHistory) : [];
+            const bidId = document.getElementById('bidId')?.value;
+            
+            if (!bidId) {
+                console.warn('No bid ID found, skipping adjustment history load');
+                this.adjustmentHistory = [];
+                return;
+            }
+            
+            fetch(`/api/adjustments/${bidId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            console.warn('Adjustment API not yet available');
+                            return []; // Return empty array for 404
+                        }
+                        throw new Error(`HTTP error: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    this.adjustmentHistory = data || [];
+                    this.updateAdjustmentHistoryDisplay();
+                })
+                .catch(error => {
+                    console.error('Error loading adjustment history:', error);
+                    this.adjustmentHistory = []; // Initialize as empty array on error
+                    // Still try to update the display with empty data
+                    this.updateAdjustmentHistoryDisplay();
+                });
         }
-
-        // Save adjustment history to localStorage
-        saveHistory() {
-            localStorage.setItem('bidAdjustmentHistory', JSON.stringify(this.adjustmentHistory));
-        }
-
-        // Record an adjustment
+        // Record an adjustment to the server
         recordAdjustment(details) {
-            const adjustmentRecord = {
-                id: Date.now(), // Unique identifier
-                timestamp: new Date().toISOString(),
-                user: this.getCurrentUser(),
-                ...details
+            const adjustmentData = {
+                bid_id: this.bidId,
+                section: details.section,
+                type: details.type,
+                direction: details.direction,
+                percentage: details.percentage,
+                original_values: details.originalValues
             };
 
-            this.adjustmentHistory.push(adjustmentRecord);
-            this.saveHistory();
-            this.updateAdjustmentHistoryDisplay();
-            return adjustmentRecord;
-        }
-
-        // Get current user
-        getCurrentUser() {
-            const usernameElement = document.getElementById('currentUsername');
-            const userIdElement = document.getElementById('currentUserId');
-
-            return {
-                username: usernameElement ? usernameElement.value : 'Unknown User',
-                id: userIdElement ? userIdElement.value : null
-            };
+            return fetch('/api/adjustments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(adjustmentData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { 
+                        throw new Error(err.error || 'Failed to save adjustment'); 
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Add to local history and update display
+                this.adjustmentHistory.unshift(data);
+                this.updateAdjustmentHistoryDisplay();
+                return data;
+            });
         }
 
         // Undo a specific adjustment
         undoAdjustment(adjustmentId) {
-            const adjustmentIndex = this.adjustmentHistory.findIndex(adj => adj.id === adjustmentId);
-            if (adjustmentIndex === -1) {
-                console.error('Adjustment not found');
-                return false;
-            }
-
-            const adjustment = this.adjustmentHistory[adjustmentIndex];
-
-            try {
-                // Revert the specific adjustment
-                this.revertAdjustment(adjustment);
-
-                // Remove the adjustment from history
-                this.adjustmentHistory.splice(adjustmentIndex, 1);
-                this.saveHistory();
-                this.updateAdjustmentHistoryDisplay();
-
-                return true;
-            } catch (error) {
-                console.error('Error undoing adjustment:', error);
-                return false;
-            }
+            return fetch(`/api/adjustments/${adjustmentId}/undo`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { 
+                        throw new Error(err.error || 'Failed to undo adjustment'); 
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Apply the reversion
+                    this.revertAdjustment(data.original_values);
+                    
+                    // Update the local history entry
+                    const adjustmentIndex = this.adjustmentHistory.findIndex(
+                        adj => adj.id === data.adjustment_id
+                    );
+                    
+                    if (adjustmentIndex !== -1) {
+                        this.adjustmentHistory[adjustmentIndex].is_active = false;
+                    }
+                    
+                    this.updateAdjustmentHistoryDisplay();
+                    return true;
+                }
+                throw new Error('Undo operation failed on server');
+            });
         }
 
-        // Revert a specific adjustment
-        revertAdjustment(adjustment) {
-            const { section, type, direction, percentage, originalValues } = adjustment;
-
-            // Get the wrapper for the specific section
-            const wrapper = $(`#${section.toLowerCase()}Wrapper`);
-
-            if (type === 'Materials') {
-                // Revert material costs
+        // Revert an adjustment using original values
+        revertAdjustment(originalValues) {
+            // Group items by section
+            const sections = {};
+            
+            // Group items by section
+            originalValues.forEach(item => {
+                const section = item.section.toLowerCase();
+                if (!sections[section]) {
+                    sections[section] = [];
+                }
+                sections[section].push(item);
+            });
+            
+            // Process each section
+            Object.entries(sections).forEach(([section, items]) => {
+                const wrapper = $(`#${section}Wrapper`);
+                let materialAdjusted = false;
+                
+                // For each row in the section
                 wrapper.find('.itemsTable tbody tr').each(function(index) {
-                    const costInput = $(this).find('.costInput');
-                    const originalCost = originalValues[index].cost;
-                    costInput.val(originalCost.toFixed(2));
-
-                    // Revert factor code item costs if applicable
-                    const factorCode = $(this).find('.factorCodeInput').val();
-                    if (factorCode && window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode]) {
-                        window.factorCodeItemsCache[factorCode].forEach((item, itemIndex) => {
-                            item.cost = originalValues[index].factorCodeItems[itemIndex].cost;
-                        });
+                    if (index < items.length) {
+                        const origItem = items[index];
+                        const tr = $(this);
+                        const factorCode = tr.find('.factorCodeInput').val();
+                        const quantity = parseFloat(tr.find('.quantity input').val()) || 0;
+                        
+                        // Restore values based on what's available
+                        if (origItem.cost !== undefined) {
+                            tr.find('.costInput').val(origItem.cost.toFixed(2));
+                            materialAdjusted = true;
+                        }
+                        
+                        if (origItem.laborHours !== undefined) {
+                            tr.find('.laborHoursInput').val(origItem.laborHours.toFixed(4));
+                        }
+                        
+                        // Restore factor code item costs if available
+                        if (origItem.factorCodeItems && origItem.factorCodeItems.length > 0 && 
+                            factorCode && window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode]) {
+                            
+                            // Restore each original factor code item cost
+                            origItem.factorCodeItems.forEach((fcItem, fcIndex) => {
+                                if (fcIndex < window.factorCodeItemsCache[factorCode].length) {
+                                    window.factorCodeItemsCache[factorCode][fcIndex].cost = fcItem.cost;
+                                }
+                            });
+                            
+                            materialAdjusted = true;
+                        }
+                        
+                        // Update calculations
+                        updateLineAndTotalCosts(tr.find('.quantity input')[0]);
                     }
                 });
-            } else {
-                // Revert labor hours
-                wrapper.find('.itemsTable tbody tr').each(function(index) {
-                    const laborInput = $(this).find('.laborHoursInput');
-                    const originalLaborHours = originalValues[index].laborHours;
-                    laborInput.val(originalLaborHours.toFixed(4));
-                });
-            }
-
-            // Update line costs and totals
-            wrapper.find('.itemsTable tbody tr').each(function() {
-                updateLineAndTotalCosts($(this).find('.quantity input')[0]);
+                
+                // If materials were adjusted, recalculate other materials costs
+                if (materialAdjusted) {
+                    showOtherMaterials(section, false);
+                }
+                
+                // Update wrapper totals
+                updateTotalCost(wrapper);
             });
-
-            // Update all totals and budgets
-            updateTotalCost(wrapper);
+            
+            // Update overall totals
             updateBudgetTotals();
         }
-
-        // Update the adjustment history display
+        // Update the adjustment history display in the UI
         updateAdjustmentHistoryDisplay() {
             const historyTable = document.getElementById('adjustmentHistoryTable');
             if (!historyTable) return;
@@ -6717,11 +6884,25 @@ function editSubBid(subBidId, category) {
                 historyTable.deleteRow(1);
             }
 
-            // Populate with current history
-            this.adjustmentHistory.forEach(adjustment => {
+            // Populate with current history, filtering out inactive adjustments
+            const activeAdjustments = this.adjustmentHistory.filter(adj => adj.is_active);
+            
+            if (activeAdjustments.length === 0) {
+                const emptyRow = historyTable.insertRow();
+                const cell = emptyRow.insertCell(0);
+                cell.colSpan = 7;
+                cell.textContent = "No adjustment history available.";
+                cell.style.textAlign = "center";
+                cell.style.fontStyle = "italic";
+                return;
+            }
+            
+            activeAdjustments.forEach(adjustment => {
                 const row = historyTable.insertRow();
+                const timestamp = new Date(adjustment.timestamp).toLocaleString();
+                
                 row.innerHTML = `
-                    <td>${new Date(adjustment.timestamp).toLocaleString()}</td>
+                    <td>${timestamp}</td>
                     <td>${adjustment.user.username}</td>
                     <td>${adjustment.section}</td>
                     <td>${adjustment.type}</td>
@@ -6729,20 +6910,18 @@ function editSubBid(subBidId, category) {
                     <td>${adjustment.percentage}%</td>
                     <td>
                         <button onclick="window.adjustmentTracker.undoAdjustment(${adjustment.id})" 
-                                class="btn btn-sm btn-warning">Undo</button>
+                                class="undo-btn">Undo</button>
                     </td>
                 `;
             });
         }
 
-        // Add method to clear adjustment history
-        clearHistory() {
-            this.adjustmentHistory = [];
-            this.saveHistory();
-            this.updateAdjustmentHistoryDisplay();
+        // Get the CSRF token from the page
+        getCsrfToken() {
+            const tokenElement = document.getElementById('csrf_token');
+            return tokenElement ? tokenElement.value : null;
         }
     }
-
     // Attach to window
     window.AdjustmentTracker = AdjustmentTracker;
 
@@ -6917,90 +7096,167 @@ function editSubBid(subBidId, category) {
             return;
         }
 
-        // Modify the applyAdjustments function to use the tracker
-        function applyAdjustments() {
-            if (!checkInputsValid()) return;
+        // Modified applyAdjustment function
+        function applyAdjustment() {
+            // Get form values
+            const selectedType = document.querySelector('input[name="adjustmentType"]:checked')?.value;
+            const selectedSection = document.querySelector('input[name="category"]:checked')?.value;
+            const selectedDirection = document.querySelector('input[name="direction"]:checked')?.value;
+            const percentageInput = document.getElementById('adjustmentPercentage');
+            const percentage = parseFloat(percentageInput?.value || '0');
 
-            const selectedType = document.querySelector('input[name="adjustmentType"]:checked').value;
-            const selectedSection = document.querySelector('input[name="category"]:checked').value;
-            const selectedDirection = document.querySelector('input[name="direction"]:checked').value;
-            const percentage = parseFloat(percentageInput.value);
+            // Validate input
+            if (!selectedType || !selectedSection || !selectedDirection || isNaN(percentage) || percentage <= 0) {
+                showNotification('Please fill in all fields with valid values.', 'error');
+                return;
+            }
+
             const multiplier = selectedDirection === 'increase' ? (1 + percentage / 100) : (1 - percentage / 100);
-            
             const wrapper = $(`#${selectedSection.toLowerCase()}Wrapper`);
+
+            if (!wrapper.length) {
+                showNotification(`Section "${selectedSection}" not found.`, 'error');
+                return;
+            }
 
             // Store original values for potential undo
             const originalValues = [];
-
-            if (selectedType === 'Materials') {
-                // First, track original values
-                wrapper.find('.itemsTable tbody tr').each(function() {
-                    const costInput = $(this).find('.costInput');
+            
+            // First pass - store all original values
+            wrapper.find('.itemsTable tbody tr').each(function() {
+                const tr = $(this);
+                const factorCode = tr.find('.factorCodeInput').val();
+                const quantity = parseFloat(tr.find('.quantity input').val()) || 0;
+                const otherMaterialsCost = parseFloat(tr.find('.otherMaterials').text().replace('$', '')) || 0;
+                
+                if (selectedType === 'Materials') {
+                    const costInput = tr.find('.costInput');
                     const currentCost = parseFloat(costInput.val()) || 0;
-                    const factorCode = $(this).find('.factorCodeInput').val();
                     
+                    // Store original values
                     const originalItem = {
+                        section: selectedSection,
                         cost: currentCost,
+                        otherMaterialsCost: otherMaterialsCost,
                         factorCodeItems: []
                     };
 
-                    // Store original factor code item costs
+                    // Store factor code items if applicable
                     if (factorCode && window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode]) {
                         originalItem.factorCodeItems = window.factorCodeItemsCache[factorCode].map(item => ({
-                            cost: item.cost
+                            cost: parseFloat(item.cost) || 0,
+                            quantity: parseFloat(item.quantity) || 0,
+                            part_number: item.part_number
                         }));
                     }
 
                     originalValues.push(originalItem);
-
-                    // Adjust costs
-                    costInput.val((currentCost * multiplier).toFixed(2));
-
-                    // Adjust factor code item costs
-                    if (factorCode && window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode]) {
-                        window.factorCodeItemsCache[factorCode].forEach(item => {
-                            item.cost = (parseFloat(item.cost) * multiplier);
-                        });
-                    }
-                });
-            } else {
-                // Labor adjustments
-                wrapper.find('.itemsTable tbody tr').each(function() {
-                    const laborInput = $(this).find('.laborHoursInput');
+                } else {
+                    const laborInput = tr.find('.laborHoursInput');
                     const currentLabor = parseFloat(laborInput.val()) || 0;
                     
-                    // Store original labor hours
+                    // Store original values
                     originalValues.push({
-                        laborHours: currentLabor
+                        section: selectedSection,
+                        laborHours: currentLabor,
+                        otherMaterialsCost: otherMaterialsCost
                     });
-
-                    // Adjust labor hours
-                    laborInput.val((currentLabor * multiplier).toFixed(4));
-                });
-            }
-
-            // Update line costs for all rows
+                }
+            });
+            
+            // Second pass - apply adjustments
             wrapper.find('.itemsTable tbody tr').each(function() {
-                updateLineAndTotalCosts($(this).find('.quantity input')[0]);
+                const tr = $(this);
+                const factorCode = tr.find('.factorCodeInput').val();
+                const quantity = parseFloat(tr.find('.quantity input').val()) || 0;
+                
+                if (selectedType === 'Materials') {
+                    const costInput = tr.find('.costInput');
+                    const currentCost = parseFloat(costInput.val()) || 0;
+                    
+                    // Apply adjustment to the direct cost
+                    costInput.val((currentCost * multiplier).toFixed(2));
+                    
+                    // Adjust factor code items costs if applicable
+                    if (factorCode && window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode]) {
+                        // Adjust each factor code item cost
+                        window.factorCodeItemsCache[factorCode].forEach(item => {
+                            item.cost = parseFloat(item.cost || 0) * multiplier;
+                        });
+                    }
+                } else {
+                    const laborInput = tr.find('.laborHoursInput');
+                    const currentLabor = parseFloat(laborInput.val()) || 0;
+                    
+                    // Apply the adjustment to labor hours
+                    laborInput.val((currentLabor * multiplier).toFixed(4));
+                }
             });
 
-            // Update all totals and budgets
+            // Update other materials costs for the whole section
+            if (selectedType === 'Materials') {
+                // Use updateOtherMaterials instead of showOtherMaterials to ensure complete recalculation
+                updateOtherMaterials(selectedSection.toLowerCase());
+            } else {
+                // Still need to update calculations for each row
+                wrapper.find('.itemsTable tbody tr').each(function() {
+                    updateLineAndTotalCosts($(this).find('.quantity input')[0]);
+                });
+            }
+            
+            // Update all totals
             updateTotalCost(wrapper);
             updateBudgetTotals();
 
+            // Show loading indicator
+            const applyButton = document.getElementById('applyAdjustment');
+            const originalText = applyButton.textContent;
+            applyButton.textContent = 'Saving...';
+            applyButton.disabled = true;
+
             // Record the adjustment using global tracker
+            if (!window.adjustmentTracker) {
+                window.adjustmentTracker = new AdjustmentTracker();
+            }
+
             window.adjustmentTracker.recordAdjustment({
                 section: selectedSection,
                 type: selectedType,
                 direction: selectedDirection,
                 percentage: percentage,
                 originalValues: originalValues
+            })
+            .then(() => {
+                // Clear the form and show success message
+                clearForm();
+                showNotification('Adjustment applied and saved successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('Error saving adjustment:', error);
+                showNotification(`Error: ${error.message}`, 'error');
+            })
+            .finally(() => {
+                // Restore button state
+                applyButton.textContent = originalText;
+                applyButton.disabled = false;
             });
-            
-            // Clear the form
-            clearForm();
         }
-
+    // Helper function to show notifications
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        
+        // Append to the top of the adjustment tab
+        const adjustmentTab = document.getElementById('Adjustment');
+        adjustmentTab.insertBefore(notification, adjustmentTab.firstChild);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 500);
+        }, 5000);
+    }
         // Add event listeners
         adjustmentType.forEach(radio => {
             radio.addEventListener('change', () => {
@@ -7028,7 +7284,7 @@ function editSubBid(subBidId, category) {
             checkInputsValid();
         });
 
-        applyButton.addEventListener('click', applyAdjustments);
+        applyButton.addEventListener('click', applyAdjustment);
 
         // Initialize the adjustment history table
         function addAdjustmentHistoryTable() {
@@ -7076,6 +7332,9 @@ function editSubBid(subBidId, category) {
     // Initialize when document is ready
     document.addEventListener('DOMContentLoaded', function() {
         initializeAdjustmentTab();
+        
+        // Create global adjustment tracker
+        window.adjustmentTracker = new AdjustmentTracker();
     });
     </script>
 </body>
