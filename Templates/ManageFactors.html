@@ -1,102 +1,773 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Manage Factors</title>
-    <style>
-        body {
-            font-family: 'Open Sans', sans-serif;
-            text-align: center;
-            background: #f4f7f6;
-            margin: 0;
-            padding: 20px;
-        }
-        h1, h2 {
-            color: #007bff;
-            margin-bottom: 20px;
-        }
-        form {
-            margin-bottom: 40px;
-        }
-        input[type="text"], input[type="number"], button {
-            padding: 10px;
-            margin: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #007bff;
-            color: white;
-            cursor: pointer;
-            border: none;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        table {
-            margin-left: auto;
-            margin-right: auto;
-            border-collapse: collapse;
-            width: 80%;
-        }
-        th, td {
-            text-align: left;
-            padding: 8px;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
-            background-color: #007bff;
-            color: white;
-        }
-        tr:hover {background-color: #f5f5f5;}
-    </style>
-<script>
-    function editFactor(factorId, description, laborHours) {
-        document.querySelector('input[name="Factor_ID"]').value = factorId;
-        document.querySelector('input[name="Description"]').value = description;
-        document.querySelector('input[name="LaborHours"]').value = laborHours;
-        window.scrollTo(0, 0);
+{% extends "layout.html" %}
+
+{% block title %}Manage Factors - Price Book{% endblock %}
+
+{% block additional_styles %}
+<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<style>
+    .section {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-</script>
-</head>
-<body>
-    <div class="home-button-container" style="text-align: left; margin-bottom: 20px;">
-        <a href="/" style="display: inline-block; padding: 10px 20px; font-size: 16px; text-decoration: none; color: white; background-color: #007bff; border: none; cursor: pointer;">Home</a>
-    </div>
-    <h1>Manage Factors</h1>
-    <form action="/factors/manage" method="post">
-        <input type="text" name="Factor_ID" placeholder="Factor ID" required>
-        <input type="text" name="Description" placeholder="Description" required>
-        <input type="number" step="0.01" name="LaborHours" placeholder="Labor Hours" required>
-        <button type="submit">Add/Update Factor</button>
+
+    .section h2 {
+        color: var(--primary-color);
+        margin-bottom: 20px;
+        font-size: 24px;
+        border-bottom: 2px solid var(--primary-color);
+        padding-bottom: 10px;
+    }
+
+    #factorForm {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    #factorForm input, #factorForm button {
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+    }
+
+    #factorForm button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+    #factorForm button:hover {
+        background-color: var(--hover-color);
+    }
+
+    #searchBar {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+        margin-bottom: 20px;
+    }
+
+    #factorsTable {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    #factorsTable th, #factorsTable td {
+        text-align: left;
+        padding: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    #factorsTable th {
+        background-color: var(--primary-color);
+        color: white;
+    }
+
+    .button-container {
+        display: flex;
+        gap: 8px;
+    }
+
+    .button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background-color 0.3s, transform 0.3s;
+        text-decoration: none;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .edit-button {
+        background: linear-gradient(135deg, #3498db, #2ecc71);
+    }
+
+    .delete-button {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+    }
+
+    .save-button {
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+    }
+
+    .cancel-button {
+        background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+    }
+
+    .button:hover {
+        transform: translateY(-2px);
+    }
+
+    .editable-input {
+        width: 100%;
+        padding: 5px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+    }
+
+    .nested-table-container {
+        margin-top: 10px;
+        border: 1px solid var(--border-color);
+        padding: 10px;
+        border-radius: 4px;
+    }
+
+    .nested-table-container table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .nested-table-container th, .nested-table-container td {
+        padding: 8px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    .pagination button {
+        padding: 8px 16px;
+        margin: 0 5px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+    .pagination button:hover:not(.disabled) {
+        background-color: var(--hover-color);
+    }
+
+    .pagination button.disabled {
+        background-color: var(--border-color);
+        cursor: not-allowed;
+    }
+
+    .warning {
+        color: red;
+        font-weight: bold;
+    }
+
+    .ui-autocomplete {
+        position: absolute;
+        z-index: 9999;
+        max-height: 200px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        border: 1px solid #ddd;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .ui-menu-item {
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+
+    .ui-menu-item:hover {
+        background-color: #f0f0f0;
+    }
+
+    .ui-helper-hidden-accessible {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
+
+<div class="section">
+    <h2>Add New Factor</h2>
+    <form id="factorForm" action="/factors/manage" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="Factor_ID" id="Factor_ID" placeholder="Factor ID" required>
+        <input type="text" name="Description" id="Description" placeholder="Description" required>
+        <input type="number" step="any" name="LaborHours" id="LaborHours" placeholder="Labor Hours" required>
+        <button type="submit">Add Factor</button>
     </form>
+</div>
+
+<div class="section">
+    <h2>Search Factors</h2>
+    <input type="text" id="searchBar" placeholder="Search Factor Codes..." oninput="searchFactors()">
+</div>
+
+<div class="section">
     <h2>Current Factors</h2>
-    <table>
+    <table id="factorsTable">
         <thead>
             <tr>
                 <th>Factor ID</th>
                 <th>Description</th>
                 <th>Labor Hours</th>
+                <th>Number of Items</th>
+                <th>Item Costs</th>
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
-            {% for factor in factors %}
-            <tr>
-                <td>{{ factor.Factor_ID }}</td>
-                <td>{{ factor.Description }}</td>
-                <td>{{ factor['Labor Hours'] }}</td>
-                <td>
-                    <button onclick='editFactor("{{ factor.Factor_ID }}", {{ factor.Description|tojson|safe }}, "{{ factor['Labor Hours'] }}")'>Edit</button>
-                    <form action="/factors/delete" method="post" style="display: inline;">
-                        <input type="hidden" name="Factor_ID" value="{{ factor.Factor_ID }}">
-                        <button type="submit">Delete</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
+        <tbody id="factorBody">
+            <!-- Table rows will be dynamically added here -->
         </tbody>
     </table>
+    <div class="pagination">
+        <button id="prevPage" class="disabled" onclick="changePage('prev')">Previous</button>
+        <button id="nextPage" onclick="changePage('next')">Next</button>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+    const csrfToken = document.getElementById('csrf_token').value;
+    
+    // For jQuery
+    $.ajaxSetup({
+        beforeSend: function(xhr, settings) {
+            if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                xhr.setRequestHeader("X-CSRFToken", csrfToken);
+            }
+        }
+    });
+
+    let factors = [];
+    let currentPage = 1;
+    const rowsPerPage = 10;
+    let query = "";
+
+    function showAlert(message, type) {
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        const alertHtml = `<div class="alert ${alertClass}">${message}<button type="button" class="close-alert" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>`;
+        
+        $('#alertContainer').html(alertHtml);
+        
+        $('.close-alert').click(function() {
+            $(this).parent('.alert').remove();
+        });
+
+        setTimeout(function() {
+            $('.alert').fadeOut(500, function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+
+    function displayPage(page) {
+        const start = (page - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const paginatedFactors = factors.slice(start, end);
+        
+        const factorBody = document.getElementById('factorBody');
+        if (!factorBody) {
+            console.error('Factor body element not found');
+            return;
+        }
+        factorBody.innerHTML = '';
+
+        paginatedFactors.forEach(factor => {
+            if (!factor) {
+                console.warn('Encountered undefined factor, skipping');
+                return;
+            }
+
+            const totalItemCost = factor.total_material_cost !== undefined ? parseFloat(factor.total_material_cost).toFixed(2) : '0.00';
+            const laborHours = factor.labor_hours !== null && factor.labor_hours !== '' ? factor.labor_hours : 'N/A';
+            const factorRow = `
+                <tr data-factor-code="${factor.factor_code}">
+                    <td>${factor.factor_code}</td>
+                    <td>
+                        <span class="text-content">${factor.description || ''}</span>
+                        <input type="text" class="editable-input" data-field="description" value="${factor.description || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content">${laborHours}</span>
+                        <input type="number" step="any" class="editable-input" data-field="labor_hours" value="${factor.labor_hours || ''}" style="display:none;">
+                    </td>
+                    <td>${factor.items ? factor.items.length : 0}</td>
+                    <td>$${totalItemCost}</td>
+                    <td>
+                        <div class="button-container">
+                            <button type="button" class="button edit-button" onclick="enableEdit(this, '${factor.factor_code}')">Edit</button>
+                            <button type="button" class="button delete-button" onclick="deleteFactor('${factor.factor_code}')">Delete</button>
+                        </div>
+                        <div class="edit-buttons" style="display:none;">
+                            <button type="button" class="button save-button" onclick="saveChanges('${factor.factor_code}')">Save</button>
+                            <button type="button" class="button cancel-button" onclick="cancelEdit(this, '${factor.factor_code}')">Cancel</button>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="nested-row" style="display: none;">
+                    <td colspan="6">
+                        <div class="nested-table-container">
+                            <h3>Contained Items</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Part Number</th>
+                                        <th>Description</th>
+                                        <th>Quantity</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${factor.items && factor.items.length > 0 ? factor.items.map(item => `
+                                        <tr>
+                                            <td>${item.part_number}</td>
+                                            <td>${item.description || ''}</td>
+                                            <td>
+                                                <span class="item-quantity">${parseFloat(item.quantity).toFixed(3)}</span>
+                                                <input type="number" step="0.001" class="item-quantity-input" style="display:none;" value="${parseFloat(item.quantity).toFixed(3)}">
+                                            </td>
+                                            <td>
+                                                <div class="button-container">
+                                                    <button type="button" class="button edit-button item-edit-btn" onclick="editItem(this, '${factor.factor_code}', '${item.part_number}')">Edit</button>
+                                                    <button type="button" class="button delete-button" onclick="removeItem('${factor.factor_code}', '${item.part_number}')">Remove</button>
+                                                </div>
+                                                <div class="edit-buttons" style="display:none;">
+                                                    <button type="button" class="button save-button item-save-btn" onclick="saveItem(this, '${factor.factor_code}', '${item.part_number}')">Save</button>
+                                                    <button type="button" class="button cancel-button item-cancel-btn" onclick="cancelItemEdit(this)">Cancel</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `).join('') : '<tr><td colspan="4">No items found</td></tr>'}
+                                </tbody>
+                            </table>
+                            <form action="/factors/add_item" method="post" class="add-item-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="Factor_ID" value="${factor.factor_code}">
+                                <input type="text" name="PartNumber" class="part-number-input" placeholder="Part Number" required>
+                                <input type="number" step="any" name="Quantity" placeholder="Quantity" required>
+                                <button type="submit" class="button save-button">Add Item</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            factorBody.insertAdjacentHTML('beforeend', factorRow);
+        });
+
+        document.getElementById('prevPage').classList.toggle('disabled', page === 1);
+        document.getElementById('nextPage').classList.toggle('disabled', end >= factors.length);
+
+        // Add click event to toggle visibility of nested tables
+        document.querySelectorAll('tr[data-factor-code]').forEach(row => {
+            row.addEventListener('click', function(e) {
+                if (!e.target.closest('button')) {
+                    const nestedRow = this.nextElementSibling;
+                    nestedRow.style.display = nestedRow.style.display === 'none' ? '' : 'none';
+                }
+            });
+        });
+        // Call initializeAutocomplete after the rows have been added
+        setTimeout(initializeAutocomplete, 0);
+    }
+
+    function initializeAutocomplete() {
+        if ($.fn.autocomplete) {
+            $('.part-number-input').autocomplete({
+                source: function(request, response) {
+                    $.ajax({
+                        url: '/search-parts',
+                        dataType: 'json',
+                        data: { query: request.term },
+                        success: function(data) {
+                            response($.map(data, function(item) {
+                                return {
+                                    label: `${item.part_number} - ${item.description} ($${parseFloat(item.cost).toFixed(2)})`,
+                                    value: item.part_number,
+                                    description: item.description,
+                                    cost: item.cost
+                                };
+                            }));
+                        }
+                    });
+                },
+                minLength: 2,
+                select: function(event, ui) {
+                    $(this).val(ui.item.value);
+                    return false;
+                },
+                focus: function(event, ui) {
+                    event.preventDefault();
+                    $(this).val(ui.item.value);
+                }
+            }).each(function() {
+                $(this).data('ui-autocomplete')._renderItem = function(ul, item) {
+                    return $("<li>")
+                        .append(`<div>${item.label}</div>`)
+                        .appendTo(ul);
+                };
+            });
+        } else {
+            console.warn('jQuery UI autocomplete is not available. Make sure jQuery UI is properly loaded.');
+        }
+    }
+
+    function addNewFactor(event) {
+        event.preventDefault();
+        const form = document.getElementById('factorForm');
+        const formData = new FormData(form);
+
+        $.ajax({
+            url: '/factors/manage',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    factors.unshift(response.factor);
+                    form.reset();
+                    displayPage(currentPage);
+                    showAlert('New factor added successfully!', 'success');
+                } else {
+                    showAlert('Failed to add new factor: ' + response.message, 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error:', error);
+                showAlert('An error occurred while adding the new factor. Please try again.', 'error');
+            }
+        });
+    }
+
+    function enableEdit(button, factorCode) {
+        const row = $(button).closest('tr');
+        row.find('.text-content').hide();
+        row.find('.editable-input').show();
+        row.find('.button-container').hide();
+        row.find('.edit-buttons').show();
+    }
+
+    function cancelEdit(button, factorCode) {
+        const row = $(button).closest('tr');
+        row.find('.editable-input').hide();
+        row.find('.text-content').show();
+        row.find('.edit-buttons').hide();
+        row.find('.button-container').show();
+    }
+
+    function saveChanges(factorCode) {
+        const row = $(`tr[data-factor-code="${factorCode}"]`);
+        const description = row.find('.editable-input[data-field="description"]').val();
+        const laborHours = row.find('.editable-input[data-field="labor_hours"]').val();
+
+        $.ajax({
+            url: '/factors/update',
+            type: 'POST',
+            data: {
+                Factor_ID: factorCode,
+                Description: description,
+                LaborHours: laborHours,
+                csrf_token: csrfToken
+            },
+            success: function(response) {
+                if (response.success) {
+                    showAlert('Factor updated successfully!', 'success');
+                    const index = factors.findIndex(f => f.factor_code === factorCode);
+                    if (index !== -1) {
+                        factors[index].description = description;
+                        factors[index].labor_hours = laborHours;
+                    }
+                    displayPage(currentPage);
+                } else {
+                    showAlert(response.message || 'An error occurred while updating the factor.', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                showAlert('An error occurred while updating the factor. Please try again.', 'error');
+            }
+        });
+    }
+
+    function editItem(button, factorCode, partNumber) {
+        const row = $(button).closest('tr');
+        row.find('.item-quantity').hide();
+        row.find('.item-quantity-input').show();
+        row.find('.button-container').hide();
+        row.find('.edit-buttons').show();
+    }
+
+    function saveItem(button, factorCode, partNumber) {
+        const row = $(button).closest('tr');
+        const newQuantity = row.find('.item-quantity-input').val();
+
+        $.ajax({
+            url: '/update-factor-code-item',
+            type: 'POST',
+            data: JSON.stringify({
+                factor_code: factorCode,
+                part_number: partNumber,
+                new_quantity: newQuantity
+            }),
+            contentType: 'application/json',
+            success: function(response) {
+                if (response.success) {
+                    showAlert('Item updated successfully!', 'success');
+                    refreshContainedItemsTable(factorCode);
+                } else {
+                    showAlert('Failed to update item. Please try again.', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error:', error);
+                showAlert('An error occurred while saving the item. Please try again.', 'error');
+            }
+        });
+    }
+
+    function cancelItemEdit(button) {
+        const row = $(button).closest('tr');
+        row.find('.item-quantity').show();
+        row.find('.item-quantity-input').hide();
+        row.find('.edit-buttons').hide();
+        row.find('.button-container').show();
+    }
+
+    function removeItem(factorCode, partNumber) {
+        if (confirm(`Are you sure you want to remove part number ${partNumber} from factor ${factorCode}?`)) {
+            $.ajax({
+                url: '/factors/remove_item',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    factor_code: factorCode,
+                    part_number: partNumber
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        showAlert('Item removed successfully!', 'success');
+                        refreshContainedItemsTable(factorCode);
+                    } else {
+                        showAlert(response.message || 'Failed to remove the item. Please try again.', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    showAlert('An error occurred while removing the item. Please try again.', 'error');
+                }
+            });
+        }
+    }
+
+    function refreshContainedItemsTable(factorCode) {
+        $.ajax({
+            url: `/get-factor-code-items/${factorCode}`,
+            type: 'GET',
+            success: function(response) {
+                if (response.items) {
+                    const factorRow = $(`tr[data-factor-code="${factorCode}"]`);
+                    const nestedRow = factorRow.next('.nested-row');
+                    const itemsTable = nestedRow.find('table tbody');
+                    itemsTable.empty();
+
+                    if (response.items.length === 0) {
+                        itemsTable.append('<tr><td colspan="4">No items found</td></tr>');
+                    } else {
+                        response.items.forEach(item => {
+                            const newRow = `
+                                <tr>
+                                    <td>${item.part_number}</td>
+                                    <td>${item.description}</td>
+                                    <td>
+                                        <span class="item-quantity">${parseFloat(item.quantity).toFixed(3)}</span>
+                                        <input type="number" step="0.001" class="item-quantity-input" style="display:none;" value="${parseFloat(item.quantity).toFixed(3)}">
+                                    </td>
+                                    <td>
+                                        <div class="button-container">
+                                            <button type="button" class="button edit-button item-edit-btn" onclick="editItem(this, '${factorCode}', '${item.part_number}')">Edit</button>
+                                            <button type="button" class="button delete-button" onclick="removeItem('${factorCode}', '${item.part_number}')">Remove</button>
+                                        </div>
+                                        <div class="edit-buttons" style="display:none;">
+                                            <button type="button" class="button save-button item-save-btn" onclick="saveItem(this, '${factorCode}', '${item.part_number}')">Save</button>
+                                            <button type="button" class="button cancel-button item-cancel-btn" onclick="cancelItemEdit(this)">Cancel</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                            itemsTable.append(newRow);
+                        });
+                    }
+                    
+                    // Update factor summary in the main table
+                    factorRow.find('td:nth-child(4)').text(response.items.length);
+                    let totalCost = response.items.reduce((sum, item) => sum + item.quantity * item.cost, 0);
+                    factorRow.find('td:nth-child(5)').text('$' + totalCost.toFixed(2));
+                    
+                    showAlert('Items refreshed successfully!', 'success');
+                } else {
+                    console.error('Server responded with an unexpected format:', response);
+                    showAlert('Failed to refresh items. Unexpected server response.', 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', status, error);
+                console.error('Response Text:', xhr.responseText);
+                let errorMessage = 'An error occurred while refreshing items.';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMessage += ' ' + xhr.responseJSON.error;
+                }
+                showAlert(errorMessage, 'error');
+            }
+        });
+    }
+
+    function changePage(direction) {
+        if (direction === 'prev' && currentPage > 1) {
+            currentPage--;
+        } else if (direction === 'next' && factors.length > currentPage * rowsPerPage) {
+            currentPage++;
+        }
+        displayPage(currentPage);
+    }
+
+    function searchFactors() {
+        query = $('#searchBar').val().toLowerCase().trim();
+        
+        if (query.length >= 2) {
+            $.ajax({
+                url: '/search-factor-codes',
+                type: 'GET',
+                data: { query: query },
+                success: function(data) {
+                    factors = data.factor_codes;
+                    currentPage = 1;
+                    displayPage(currentPage);
+                    // Update URL with search query
+                    const url = new URL(window.location);
+                    url.searchParams.set('query', query);
+                    url.searchParams.set('page', currentPage);
+                    window.history.replaceState({}, '', url);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error searching factors:', error);
+                    showAlert('An error occurred while searching factors. Please try again.', 'error');
+                }
+            });
+        } else if (query.length === 0) {
+            loadFactors();  // Reset to all factors
+        }
+    }
+
+    function deleteFactor(factorCode) {
+        if (confirm('Are you sure you want to delete this factor code?')) {
+            $.ajax({
+                url: '/factors/delete',
+                type: 'POST',
+                data: {
+                    Factor_ID: factorCode,
+                    csrf_token: csrfToken
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showAlert(response.message, 'success');
+                        factors = factors.filter(factor => factor.factor_code !== factorCode);
+                        displayPage(currentPage);
+                    } else {
+                        showAlert(response.message, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    let errorMessage = 'An error occurred while deleting the factor code.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+                    showAlert(errorMessage, 'error');
+                }
+            });
+        }
+    }
+
+    $(document).ready(function() {
+        loadFactors();  // Load factors when page loads
+
+        $('#factorForm').on('submit', function(e) {
+            e.preventDefault();
+            addNewFactor(e);
+        });
+
+        // Handle add item form submission
+        $(document).on('submit', '.add-item-form', function(e) {
+            e.preventDefault();
+            const form = $(this);
+            const formData = new FormData(form[0]);
+
+            $.ajax({
+                url: form.attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        showAlert('Item added successfully!', 'success');
+                        const factorCode = form.find('input[name="Factor_ID"]').val();
+                        refreshContainedItemsTable(factorCode);
+                        form[0].reset();
+                    } else {
+                        showAlert(response.message || 'Failed to add item. Please try again.', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    showAlert('An error occurred while adding the item. Please try again.', 'error');
+                }
+            });
+        });
+
+        // Initial display of factors
+        displayPage(currentPage);
+
+        // Initialize search functionality
+        $('#searchBar').on('input', debounce(searchFactors, 500));
+        // Update the debounce function to cancel the previous timer
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+        // Initialize autocomplete
+        initializeAutocomplete();
+    });
+    function loadFactors() {
+        $.ajax({
+            url: '/factors',
+            type: 'GET',
+            success: function(data) {
+                factors = data;
+                displayPage(currentPage);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading factors:', error);
+                showAlert('An error occurred while loading factors. Please try again.', 'error');
+            }
+        });
+    }
+</script>
+{% endblock %}
 </body>
 </html>

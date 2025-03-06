@@ -1,0 +1,335 @@
+{% extends "layout.html" %}
+
+{% block title %}Manage Conversion Codes - Price Book{% endblock %}
+
+{% block additional_styles %}
+<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<style>
+    .nested-table-container {
+        margin-top: 10px;
+        border: 1px solid var(--border-color);
+        padding: 10px;
+        background-color: #ffffff;
+    }
+
+    .nested-table-container table {
+        width: 100%;
+    }
+
+    .nested-table-container th, .nested-table-container td {
+        padding: 5px;
+    }
+
+    .description-col {
+        width: 35%;
+    }
+
+    .small-col {
+        width: 10%;
+    }
+
+    .conversion-code-row {
+        cursor: pointer;
+    }
+
+    .partNumberInput {
+        width: 100%;
+        padding: 5px;
+        margin-bottom: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <form id="conversionCodeForm" action="/conversion-codes/manage" method="post">
+        <input type="text" name="code" id="code" placeholder="Conversion Code" required>
+        <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Add Conversion Code</button>
+    </form>
+
+    <div class="search-bar">
+        <input type="text" id="searchBar" placeholder="Search Conversion Codes...">
+    </div>
+
+    <h2>Current Conversion Codes</h2>
+    <table id="conversionCodesTable">
+        <thead>
+            <tr>
+                <th>Conversion Code</th>
+                <th class="description-col">Number of Items</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="conversionCodeBody">
+            <!-- Table rows will be dynamically added here -->
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <button id="prevPage" class="disabled" onclick="changePage('prev')">Previous</button>
+        <button id="nextPage" onclick="changePage('next')">Next</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+    let conversionCodes = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    const rowsPerPage = 10;
+    let query = "";
+
+    function displayPage(page) {
+        const start = (page - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const paginatedCodes = conversionCodes.slice(start, end);
+        
+        const codeBody = document.getElementById('conversionCodeBody');
+        codeBody.innerHTML = '';
+
+        paginatedCodes.forEach(code => {
+            const codeRow = `
+                <tr data-code="${code.code}" class="conversion-code-row">
+                    <td>${code.code}</td>
+                    <td class="description-col">${code.items.length}</td>
+                    <td>
+                        <button type="button" class="btn btn-danger" onclick="deleteConversionCode('${code.code}')">Delete</button>
+                    </td>
+                </tr>
+                <tr id="items-${code.code}" style="display: none;">
+                    <td colspan="3">
+                        <div class="nested-table-container">
+                            <h3>Connected Part Numbers</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Part Number</th>
+                                        <th>Description</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${code.items.map(item => `
+                                        <tr>
+                                            <td>${item.part_number}</td>
+                                            <td>${item.description}</td>
+                                            <td>
+                                                <button type="button" class="btn btn-danger" onclick="removeItem('${code.code}', '${item.part_number}')">Remove</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            <form onsubmit="addItem('${code.code}'); return false;">
+                                <input type="text" name="part_number" class="partNumberInput" placeholder="Part Number" required>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-primary">Add Item</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            codeBody.insertAdjacentHTML('beforeend', codeRow);
+        });
+
+        document.getElementById('prevPage').classList.toggle('disabled', page === 1);
+        document.getElementById('nextPage').classList.toggle('disabled', end >= conversionCodes.length);
+
+        // Add click event to toggle visibility of nested tables
+        document.querySelectorAll('.conversion-code-row').forEach(row => {
+            row.addEventListener('click', function() {
+                const code = this.dataset.code;
+                document.getElementById(`items-${code}`).style.display = 
+                    document.getElementById(`items-${code}`).style.display === 'none' ? '' : 'none';
+            });
+        });
+
+        attachAutocompleteToPartNumber($('.partNumberInput'));
+    }
+
+    function deleteConversionCode(code) {
+        if (confirm(`Are you sure you want to delete the conversion code ${code}?`)) {
+            $.ajax({
+                url: '/conversion-codes/delete',
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': $('#csrf_token').val()
+                },
+                data: JSON.stringify({ code: code, csrf_token: $('#csrf_token').val() }),
+                contentType: 'application/json',
+                success: function(response) {
+                    if (response.success) {
+                        showAlert('success', 'Conversion code deleted successfully');
+                        searchConversionCodes();
+                    } else {
+                        showAlert('error', 'Error deleting conversion code: ' + response.message);
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('Error deleting conversion code:', textStatus, errorThrown);
+                    showAlert('error', 'Error deleting conversion code: ' + jqXHR.responseText);
+                }
+            });
+        }
+    }
+
+    function removeItem(code, partNumber) {
+        $.ajax({
+            url: '/conversion-codes/remove-item',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': $('#csrf_token').val()
+            },
+            data: JSON.stringify({ conversion_code: code, part_number: partNumber }),
+            success: function(response) {
+                if (response.success) {
+                    showAlert('success', 'Item removed successfully');
+                    searchConversionCodes();
+                } else {
+                    showAlert('error', 'Error removing item: ' + response.message);
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('Error removing item:', textStatus, errorThrown);
+                showAlert('error', 'Error removing item: ' + jqXHR.responseText);
+            }
+        });
+    }
+
+    function addItem(code) {
+        const form = event.target;
+        const partNumber = form.part_number.value;
+        const csrfToken = form.csrf_token.value;
+
+        $.ajax({
+            url: '/conversion-codes/add-item',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            data: JSON.stringify({ code: code, part_number: partNumber, csrf_token: csrfToken }),
+            contentType: 'application/json',
+            success: function(response) {
+                if (response.success) {
+                    form.reset();
+                    showAlert('success', 'Item added successfully');
+                    searchConversionCodes().then(() => {
+                        // Keep the items section open
+                        $(`tr[data-code="${code}"]`).next().show();
+                    });
+                } else {
+                    showAlert('error', 'Error: ' + response.message);
+                }
+            },
+            error: function(xhr) {
+                showAlert('error', 'Error: ' + xhr.responseText);
+            }
+        });
+    }
+
+    function changePage(direction) {
+        if (direction === 'prev' && currentPage > 1) {
+            currentPage--;
+        } else if (direction === 'next' && currentPage < totalPages) {
+            currentPage++;
+        }
+        searchConversionCodes();
+    }
+
+    function searchConversionCodes() {
+        query = $('#searchBar').val().toLowerCase();
+        return $.getJSON(`/search-conversion-codes?query=${query}&page=${currentPage}`, function(data) {
+            conversionCodes = data.codes;
+            currentPage = data.current_page;
+            totalPages = data.total_pages;
+            displayPage(currentPage);
+        });
+    }
+
+    function attachAutocompleteToPartNumber(selector) {
+        selector.autocomplete({
+            minLength: 1,
+            source: function(request, response) {
+                $.ajax({
+                    url: "/inventory/search",
+                    data: { query: request.term },
+                    success: function(data) {
+                        response($.map(data.inventory, function(item) {
+                            return {
+                                label: item.part_number + " - " + item.description,
+                                value: item.part_number,
+                                desc: item.description,
+                                cost: item.cost,
+                                factorCode: item.factor_code
+                            };
+                        }));
+                    },
+                    error: function() {
+                        response([]);
+                    }
+                });
+            },
+            select: function(event, ui) {
+                $(this).val(ui.item.value);
+                return false;
+            }
+        }).on('keydown', function(event) {
+            if (event.keyCode === 13) {
+                var menu = $(this).autocomplete("widget");
+                if (menu.is(":visible")) {
+                    var highlighted = menu.find(".ui-state-active");
+                    if (highlighted.length === 0) {
+                        highlighted = menu.children().first();
+                    }
+                    highlighted.trigger("click");
+                    return false;
+                }
+            }
+        });
+    }
+
+    $(document).ready(function() {
+        searchConversionCodes();
+        $('#searchBar').on('input', searchConversionCodes);
+
+        $('#conversionCodeForm').submit(function(e) {
+            e.preventDefault();
+            const formData = {
+                code: $('#code').val(),
+                csrf_token: $('#csrf_token').val()
+            };
+
+            $.ajax({
+                url: '/conversion-codes/manage',
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': $('#csrf_token').val()
+                },
+                data: JSON.stringify(formData),
+                contentType: 'application/json',
+                success: function(response) {
+                    if (response.success) {
+                        showAlert('success', 'Conversion code added successfully');
+                        searchConversionCodes().then(() => {
+                            // Open the newly added code
+                            $(`tr[data-code="${response.code}"]`).click();
+                        });
+                        $('#conversionCodeForm')[0].reset();
+                    } else {
+                        showAlert('error', 'Error: ' + response.message);
+                    }
+                },
+                error: function(xhr) {
+                    showAlert('error', 'Error: ' + xhr.responseText);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+</body>
+</html>

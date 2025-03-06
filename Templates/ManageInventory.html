@@ -1,120 +1,732 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Manage Inventory</title>
-    <style>
-        body {
-            font-family: 'Open Sans', sans-serif;
-            text-align: center;
-            background: #f4f7f6;
-            margin: 0;
-            padding: 20px;
-        }
-        h1, h2 {
-            color: #007bff;
-            margin-bottom: 20px;
-        }
-        form {
-            margin-bottom: 40px;
-        }
-        input[type="text"], input[type="number"], button {
-            padding: 10px;
-            margin: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #007bff;
-            color: white;
-            cursor: pointer;
-            border: none;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        table {
-            margin-left: auto;
-            margin-right: auto;
-            border-collapse: collapse;
-            width: 80%;
-        }
-        th, td {
-            text-align: left;
-            padding: 8px;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
-            background-color: #007bff;
-            color: white;
-        }
-        tr:hover {background-color: #f5f5f5;}
-    </style>
-<script>
-    function editItem(partNum, description, cost, factorCode) {
-        document.querySelector('input[name="PartNum"]').value = partNum;
-        document.querySelector('input[name="Description"]').value = description;
-        document.querySelector('input[name="Cost"]').value = parseFloat(cost).toFixed(2);
-        document.querySelector('input[name="FactorCode"]').value = factorCode; // Correctly setting the Factor Code for editing
-        window.scrollTo(0, 0);
+{% extends "layout.html" %}
+
+{% block title %}Manage Inventory - Price Book{% endblock %}
+
+{% block additional_styles %}
+<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<style>
+    .section {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    document.addEventListener('DOMContentLoaded', (event) => {
-        const costCells = document.querySelectorAll('table tbody tr td:nth-child(3)');
-        costCells.forEach(cell => {
-            const costValue = parseFloat(cell.textContent.replace('$', '').replace(',', ''));
-            const formatter = new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-            });
-            cell.textContent = formatter.format(costValue);
-        });
-    });
-</script>
+    .section h2 {
+        color: var(--primary-color);
+        margin-bottom: 20px;
+        font-size: 24px;
+        border-bottom: 2px solid var(--primary-color);
+        padding-bottom: 10px;
+    }
 
-</head>
-<body>
-    <div class="home-button-container" style="text-align: left; margin-bottom: 20px;">
-        <a href="/" style="display: inline-block; padding: 10px 20px; font-size: 16px; text-decoration: none; color: white; background-color: #007bff; border: none; cursor: pointer;">Home</a>
+    .labor-rates-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .labor-rate-input {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .labor-rate-input label {
+        margin-bottom: 5px;
+        color: var(--text-color);
+        font-weight: 500;
+    }
+
+    .labor-rate-input input {
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+    }
+
+    #save-labor-rates {
+        background-color: var(--secondary-color);
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s ease;
+    }
+
+    #save-labor-rates:hover {
+        background-color: #27ae60;
+    }
+
+    #inventoryForm {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    #inventoryForm input {
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+    }
+
+    #inventoryForm button {
+        background-color: var(--primary-color);
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s ease;
+    }
+
+    #inventoryForm button:hover {
+        background-color: var(--hover-color);
+    }
+
+    #searchForm {
+        margin-bottom: 20px;
+    }
+
+    #searchForm input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+    }
+
+    .editable {
+        display: none;
+    }
+
+    .edit-mode .editable {
+        display: table-cell;
+    }
+
+    .edit-mode .view-mode {
+        display: none;
+    }
+
+    .editable input {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    @media (max-width: 768px) {
+        #inventoryForm {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Updated Autocomplete styles */
+    .ui-autocomplete {
+        position: absolute;
+        max-height: 300px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        z-index: 9999;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        background-color: white;
+    }
+
+    .ui-menu-item {
+        padding: 8px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+    }
+
+    .ui-menu-item:last-child {
+        border-bottom: none;
+    }
+
+    .ui-menu-item:hover {
+        background-color: #f5f5f5;
+    }
+
+    .ui-menu-item-wrapper {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .factor-code {
+        font-weight: bold;
+        color: #333;
+    }
+
+    .factor-description {
+        font-size: 0.9em;
+        color: #666;
+    }
+
+    .factor-labor-hours {
+        font-size: 0.8em;
+        color: #999;
+    }
+
+    .ui-helper-hidden-accessible {
+        display: none;
+    }
+
+    #FactorCode, .edit-factor-code {
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 16px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+
+    /* Ensure the autocomplete is above other elements */
+    .ui-front {
+        z-index: 9999;
+    }
+
+    /* New button styles */
+    .button-container {
+        display: flex;
+        gap: 8px;
+    }
+
+    .button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background-color 0.3s, transform 0.3s;
+        text-decoration: none;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .edit-button {
+        background: linear-gradient(135deg, #3498db, #2ecc71);
+    }
+
+    .delete-button {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+    }
+
+    .save-button {
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+    }
+
+    .cancel-button {
+        background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+    }
+
+    .button:hover {
+        transform: translateY(-2px);
+    }
+
+    .button i {
+        margin-right: 4px;
+    }
+
+    @media (max-width: 768px) {
+        .button-container {
+            flex-direction: column;
+        }
+
+        .button {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
+
+<div class="section">
+    <h2>Default Labor Rates</h2>
+    <div class="labor-rates-container">
+        <div class="labor-rate-input">
+            <label for="drains-labor-rate">Drains Labor Rate:</label>
+            <input type="number" id="drains-labor-rate" name="drains-labor-rate" step="0.01" min="0">
+        </div>
+        <div class="labor-rate-input">
+            <label for="irrigation-labor-rate">Irrigation Labor Rate:</label>
+            <input type="number" id="irrigation-labor-rate" name="irrigation-labor-rate" step="0.01" min="0">
+        </div>
+        <div class="labor-rate-input">
+            <label for="landscape-labor-rate">Landscape Labor Rate:</label>
+            <input type="number" id="landscape-labor-rate" name="landscape-labor-rate" step="0.01" min="0">
+        </div>
+        <div class="labor-rate-input">
+            <label for="maintenance-labor-rate">Maintenance Labor Rate:</label>
+            <input type="number" id="maintenance-labor-rate" name="maintenance-labor-rate" step="0.01" min="0">
+        </div>
     </div>
-    <h1>Manage Inventory</h1>
-    <form action="/inventory/manage" method="post">
-        <input type="text" name="PartNum" placeholder="Part Number" required>
-        <input type="text" name="Description" placeholder="Description" required>
-        <input type="number" step="0.01" name="Cost" placeholder="Cost" required>
-        <!-- Add input for Factor Code -->
-        <input type="text" name="FactorCode" placeholder="Factor Code" required>
-        <button type="submit">Add/Update Item</button>
+    <button id="save-labor-rates">Save Labor Rates</button>
+</div>
+
+<div class="section">
+    <h2>Add New Inventory Item</h2>
+    <form id="inventoryForm" action="/inventory/manage" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="PartNum" id="PartNum" placeholder="Part Number" required>
+        <input type="text" name="Description" id="Description" placeholder="Description" required>
+        <input type="number" step="0.01" name="Cost" id="Cost" placeholder="Cost" required>
+        <input type="text" name="FactorCode" id="FactorCode" placeholder="Factor Code" required>
+        <button type="submit">Add Item</button>
     </form>
+</div>
+
+<div class="section">
+    <h2>Search Inventory</h2>
+    <form id="searchForm" action="/inventory/manage" method="get" class="search-container">
+        <input type="text" name="part_number_search" id="partNumberSearch" placeholder="Search by Part Number or Description">
+    </form>
+</div>
+
+<div class="section">
     <h2>Current Inventory</h2>
-    <table>
+    <table id="inventoryTable">
         <thead>
             <tr>
                 <th>Part Number</th>
                 <th>Description</th>
                 <th>Cost</th>
-                <th>Factor Code</th> <!-- Updated from Random Factor to Factor Code -->
+                <th>Factor Code</th>
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
-            {% for item in inventory %}
-            <tr>
-                <td>{{ item.PartNum }}</td>
-                <td>{{ item.Description }}</td>
-                <td>{{ item.Cost }}</td>
-                <td>{{ item.FactorCode }}</td> <!-- Displaying the Factor Code -->
-                <td>
-                    <button onclick='editItem("{{ item.PartNum }}", {{ item.Description|tojson|safe }}, "{{ item.Cost }}", "{{ item.FactorCode }}")'>Edit</button>
-                    <form action="/inventory/delete" method="post" style="display: inline;">
-                        <input type="hidden" name="PartNum" value="{{ item.PartNum }}">
-                        <button type="submit">Delete</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
+        <tbody id="inventoryTableBody">
+            <!-- Content will be dynamically updated by JavaScript -->
         </tbody>
     </table>
+
+    <!-- Pagination Controls -->
+    <div class="pagination" id="paginationControls">
+        <!-- Content will be dynamically updated by JavaScript -->
+    </div>
+</div>
+
+<div id="deleteModal" class="modal">
+    <div class="modal-content">
+        <h2>Confirm Deletion</h2>
+        <p id="deleteModalMessage"></p>
+        <button id="confirmDelete">Delete</button>
+        <button id="cancelDelete">Cancel</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+    // Global variables
+    let currentQuery = '';
+    let currentPage = 1;
+
+    // Function to perform the actual delete operation
+    function performDelete(partNumber) {
+        $.ajax({
+            url: '/inventory/delete',
+            type: 'POST',
+            data: {
+                PartNum: partNumber,
+                confirm: 'true',
+                csrf_token: $('#csrf_token').val()
+            },
+            success: function(response) {
+                if (response.success) {
+                    showAlert('success', response.message);
+                    // Remove the deleted row from the table
+                    $('tr[data-part-number="' + partNumber + '"]').remove();
+                } else {
+                    showAlert('error', 'Failed to delete item: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                showAlert('error', 'An error occurred while deleting the item. Please try again.');
+            }
+        });
+    }
+
+    // Function to display alerts
+    function showAlert(type, message) {
+        var alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        var alertHtml = '<div class="alert ' + alertClass + '">' +
+                        message +
+                        '<button type="button" class="close-alert" aria-label="Close">' +
+                        '<span aria-hidden="true">&times;</span></button></div>';
+        
+        $('#alertContainer').html(alertHtml);
+        
+        // Attach click event to close button
+        $('.close-alert').click(function() {
+            $(this).parent('.alert').remove();
+        });
+
+        // Automatically remove the alert after 5 seconds
+        setTimeout(function() {
+            $('.alert').remove();
+        }, 5000);
+    }
+
+    // Function to show delete confirmation modal
+    function showDeleteConfirmation(partNumber, message) {
+        $('#deleteModalMessage').text(message);
+        $('#deleteModal').show();
+
+        $('#confirmDelete').off('click').on('click', function() {
+            $('#deleteModal').hide();
+            performDelete(partNumber);
+        });
+
+        $('#cancelDelete').off('click').on('click', function() {
+            $('#deleteModal').hide();
+        });
+    }
+
+    function deleteInventoryItem(partNumber) {
+        $.ajax({
+            url: '/inventory/check-delete',
+            type: 'POST',
+            data: {
+                PartNum: partNumber,
+                csrf_token: $('#csrf_token').val()
+            },
+            success: function(response) {
+                console.log('Check delete response:', response);
+                if (response.can_delete) {
+                    if (response.has_factor_codes) {
+                        showDeleteConfirmation(partNumber, response.message);
+                    } else {
+                        showDeleteConfirmation(partNumber, 'Are you sure you want to delete this item?');
+                    }
+                } else {
+                    alert(response.message);
+                }
+            },
+            error: function(error) {
+                console.error('Error checking delete:', error);
+                alert('Failed to check item dependencies. Please try again.');
+            }
+        });
+    }
+
+    function fetchFilteredData(query, page) {
+        $.ajax({
+            url: '/inventory/search',
+            type: 'GET',
+            data: {
+                query: query,
+                page: page
+            },
+            success: function (response) {
+                updateTable(response.inventory);
+                updatePagination(response.total_pages, response.current_page);
+            },
+            error: function (error) {
+                console.error('Error fetching inventory:', error);
+            }
+        });
+    }
+
+    function updateTable(data) {
+        let tableBody = $('#inventoryTableBody');
+        tableBody.empty();
+
+        data.forEach(item => {
+            let row = `
+                <tr data-part-number="${item.part_number}">
+                    <td class="view-mode">${item.part_number}</td>
+                    <td class="view-mode">${item.description}</td>
+                    <td class="view-mode">$${item.cost.toFixed(2)}</td>
+                    <td class="view-mode">${item.factor_code}</td>
+                    <td class="view-mode">
+                        <div class="button-container">
+                            <button class="button edit-button"><i class="fas fa-edit"></i> Edit</button>
+                            <button class="button delete-button"><i class="fas fa-trash"></i> Delete</button>
+                        </div>
+                    </td>
+                    <td class="editable">
+                        <input type="text" class="edit-part-number" value="${item.part_number}" readonly>
+                    </td>
+                    <td class="editable">
+                        <input type="text" class="edit-description" value="${item.description}">
+                    </td>
+                    <td class="editable">
+                        <input type="number" step="0.01" class="edit-cost" value="${item.cost}">
+                    </td>
+                    <td class="editable">
+                        <input type="text" class="edit-factor-code" value="${item.factor_code}">
+                    </td>
+                    <td class="editable">
+                        <div class="button-container">
+                            <button class="button save-button"><i class="fas fa-save"></i> Save</button>
+                            <button class="button cancel-button"><i class="fas fa-times"></i> Cancel</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            tableBody.append(row);
+        });
+    }
+
+    function updatePagination(totalPages, currentPage) {
+        let paginationControls = $('#paginationControls');
+        paginationControls.empty();
+
+        if (totalPages > 1) {
+            if (currentPage > 1) {
+                paginationControls.append(`<a href="javascript:void(0)" onclick="fetchFilteredData('${currentQuery}', 1)">First</a>`);
+                paginationControls.append(`<a href="javascript:void(0)" onclick="fetchFilteredData('${currentQuery}', ${currentPage - 1})">Previous</a>`);
+            }
+
+            paginationControls.append(`<span class="current-page-info">Page ${currentPage} of ${totalPages}</span>`);
+
+            if (currentPage < totalPages) {
+                paginationControls.append(`<a href="javascript:void(0)" onclick="fetchFilteredData('${currentQuery}', ${currentPage + 1})">Next</a>`);
+                paginationControls.append(`<a href="javascript:void(0)" onclick="fetchFilteredData('${currentQuery}', ${totalPages})">Last</a>`);
+            }
+        } else {
+            paginationControls.append('<span class="current-page-info">Page 1 of 1</span>');
+        }
+    }
+
+    function initializeAutocomplete(element) {
+        element.autocomplete({
+            source: function (request, response) {
+                $.ajax({
+                    url: '/search-factor-codes',
+                    data: {
+                        query: request.term
+                    },
+                    success: function (data) {
+                        response($.map(data.factor_codes, function (factor) {
+                            return {
+                                label: `${factor.factor_code} - ${factor.description}`,
+                                value: factor.factor_code,
+                                description: factor.description,
+                                laborHours: factor.labor_hours
+                            };
+                        }));
+                    }
+                });
+            },
+            minLength: 2,
+            select: function (event, ui) {
+                console.log("Selected factor:", ui.item);
+                event.preventDefault();
+                $(this).val(ui.item.value);
+            },
+            focus: function(event, ui) {
+                event.preventDefault();
+                $(this).val(ui.item.value);
+            },
+            position: {
+                my: "left top",
+                at: "left bottom",
+                collision: "flip"
+            },
+            open: function(event, ui) {
+                $('.ui-autocomplete').css('z-index', 1000);
+                $(this).autocomplete('widget').css('position', 'absolute');
+                $(this).autocomplete('widget').css('width', $(this).outerWidth() + 'px');
+            }
+        }).autocomplete("instance")._renderItem = function (ul, item) {
+            return $("<li>")
+                .append("<div class='ui-menu-item-wrapper'>" +
+                    "<span class='factor-code'>" + item.value + "</span>" +
+                    "<span class='factor-description'>" + item.description + "</span>" +
+                    "<span class='factor-labor-hours'>Labor Hours: " + item.laborHours + "</span>" +
+                    "</div>")
+                .appendTo(ul);
+        };
+    }
+
+    function loadDefaultLaborRates() {
+        $.ajax({
+            url: '/get-default-labor-rates',
+            type: 'GET',
+            success: function (response) {
+                console.log('Received labor rates:', response);
+                $('#drains-labor-rate').val(response.drains_labor_rate || '');
+                $('#irrigation-labor-rate').val(response.irrigation_labor_rate || '');
+                $('#landscape-labor-rate').val(response.landscape_labor_rate || '');
+                $('#maintenance-labor-rate').val(response.maintenance_labor_rate || '');
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                console.error('Error loading default labor rates:', jqXHR.responseText);
+                showAlert('error', 'Failed to load default labor rates. Please check the console for more information.');
+            }
+        });
+    }
+
+    function saveDefaultLaborRates() {
+        const csrfToken = $('#csrf_token').val();
+        if (!csrfToken) {
+            console.error('CSRF token is missing');
+            showAlert('error', 'Error: CSRF token is missing. Please reload the page and try again.');
+            return;
+        }
+
+        let laborRates = {
+            drains_labor_rate: $('#drains-labor-rate').val(),
+            irrigation_labor_rate: $('#irrigation-labor-rate').val(),
+            landscape_labor_rate: $('#landscape-labor-rate').val(),
+            maintenance_labor_rate: $('#maintenance-labor-rate').val()
+        };
+
+        console.log('Sending labor rates:', laborRates);
+
+        $.ajax({
+            url: '/save-default-labor-rates',
+            type: 'POST',
+            data: JSON.stringify(laborRates),
+            contentType: 'application/json',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            success: function (response) {
+                console.log('Save response:', response);
+                if (response.success) {
+                    showAlert('success', 'Default labor rates saved successfully!');
+                } else {
+                    showAlert('error', 'Failed to save default labor rates: ' + response.message);
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                console.error('Error saving default labor rates:', jqXHR.responseText);
+                showAlert('error', 'Failed to save default labor rates. Please check the console for more information.');
+            }
+        });
+    }
+
+    // Debounce function to limit the rate at which a function can fire
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // Create a debounced version of fetchFilteredData
+    const debouncedFetchFilteredData = debounce(fetchFilteredData, 300);
+
+    $(document).ready(function () {
+        var csrfToken = $('#csrf_token').val();
+        $.ajaxSetup({
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        });
+
+        // Initialize autocomplete for the new item form
+        initializeAutocomplete($("#FactorCode"));
+
+        // Load default labor rates
+        loadDefaultLaborRates();
+
+        // Event handler for saving default labor rates
+        $('#save-labor-rates').on('click', saveDefaultLaborRates);
+
+        // Event handler for adding new inventory item
+        $('#inventoryForm').on('submit', function(e) {
+            e.preventDefault();
+            $.ajax({
+                url: '/inventory/manage',
+                type: 'POST',
+                data: $(this).serialize(),
+                success: function(response) {
+                    fetchFilteredData('', 1);
+                    $('#inventoryForm')[0].reset();
+                    showAlert('success', 'Item added successfully');
+                },
+                error: function(error) {
+                    console.error('Error adding inventory item:', error);
+                    showAlert('error', 'Failed to add inventory item. Please try again.');
+                }
+            });
+        });
+
+        // Event delegation for edit button clicks
+        $('#inventoryTableBody').on('click', '.edit-button', function () {
+            let row = $(this).closest('tr');
+            row.addClass('edit-mode');
+            let factorCodeInput = row.find('.edit-factor-code');
+            factorCodeInput.prop('disabled', false).show();
+            initializeAutocomplete(factorCodeInput);
+        });
+
+        // Event delegation for save button clicks
+        $('#inventoryTableBody').on('click', '.save-button', function () {
+            let row = $(this).closest('tr');
+            let partNumber = row.find('.edit-part-number').val();
+            let updatedDescription = row.find('.edit-description').val();
+            let updatedCost = row.find('.edit-cost').val();
+            let updatedFactorCode = row.find('.edit-factor-code').val();
+
+            $.ajax({
+                url: '/inventory/update',
+                type: 'POST',
+                data: {
+                    PartNum: partNumber,
+                    Description: updatedDescription,
+                    Cost: updatedCost,
+                    FactorCode: updatedFactorCode,
+                    csrf_token: csrfToken
+                },
+                success: function (response) {
+                    if (response.success) {
+                        row.find('.view-mode').eq(1).text(updatedDescription);
+                        row.find('.view-mode').eq(2).text('$' + parseFloat(updatedCost).toFixed(2));
+                        row.find('.view-mode').eq(3).text(updatedFactorCode);
+                        row.removeClass('edit-mode');
+                        showAlert('success', 'Item updated successfully');
+                    } else {
+                        showAlert('error', 'Failed to update inventory: ' + response.message);
+                    }
+                },
+                error: function (error) {
+                    console.error('Error updating inventory:', error);
+                    showAlert('error', 'Failed to update inventory. Please try again.');
+                }
+            });
+        });
+
+        // Event delegation for cancel button clicks
+        $('#inventoryTableBody').on('click', '.cancel-button', function () {
+            $(this).closest('tr').removeClass('edit-mode');
+        });
+
+        // Event delegation for delete button clicks
+        $('#inventoryTableBody').on('click', '.delete-button', function () {
+            let partNumber = $(this).closest('tr').data('part-number');
+            deleteInventoryItem(partNumber);
+        });
+
+        // Search functionality
+        $('#partNumberSearch').on('input', function () {
+            let searchQuery = $(this).val();
+            currentQuery = searchQuery;
+            currentPage = 1;
+            debouncedFetchFilteredData(currentQuery, currentPage);
+        });
+
+        // Initial data load
+        fetchFilteredData('', 1);
+    });
+</script>
+{% endblock %}
 </body>
 </html>

@@ -1,0 +1,827 @@
+{% extends "layout.html" %}
+
+{% block title %}Manage Purchase Orders{% endblock %}
+
+{% block content %}
+<div class="content-container">
+    <h1>Manage Purchase Orders</h1>
+    
+    <div class="search-container">
+        <div class="search-wrapper">
+            <input type="text" 
+                   id="jobSearch" 
+                   class="search-bar" 
+                   placeholder="Search by Job Number, Project Name, Address, or Customer..."
+                   value="{{ request.args.get('search', '') }}">
+            <div id="searchResults" class="search-results"></div>
+        </div>
+    </div>
+
+    <div id="jobDetails" class="job-details" style="display: none;">
+        <h2>Job Details</h2>
+        <div class="details-grid">
+            <div class="detail-item">
+                <strong>Job Number:</strong>
+                <span id="jobNumber"></span>
+            </div>
+            <div class="detail-item">
+                <strong>Project Name:</strong>
+                <span id="projectName"></span>
+            </div>
+            <div class="detail-item">
+                <strong>Customer:</strong>
+                <span id="customerName"></span>
+            </div>
+            <div class="detail-item">
+                <strong>Project Address:</strong>
+                <span id="projectAddress"></span>
+            </div>
+        </div>
+
+        <div class="category-buttons">
+            <div class="button-group">
+                <button class="category-btn drains-btn" onclick="handleCategoryClick('drains')">
+                    <i class="fas fa-water"></i> Drains 
+                    <span id="drainsStatus" class="status-symbol"></span>
+                </button>
+                <button class="field-order-btn drains-field" onclick="generateFieldOrder('drains')">
+                    <i class="fas fa-file-alt"></i> Field Order
+                </button>
+            </div>
+            
+            <div class="button-group">
+                <button class="category-btn irrigation-btn" onclick="handleCategoryClick('irrigation')">
+                    <i class="fas fa-tint"></i> Irrigation 
+                    <span id="irrigationStatus" class="status-symbol"></span>
+                </button>
+                <button class="field-order-btn irrigation-field" onclick="generateFieldOrder('irrigation')">
+                    <i class="fas fa-file-alt"></i> Field Order
+                </button>
+            </div>
+            
+            <div class="button-group">
+                <button class="category-btn landscape-btn" onclick="handleCategoryClick('landscape')">
+                    <i class="fas fa-tree"></i> Landscape 
+                    <span id="landscapeStatus" class="status-symbol"></span>
+                </button>
+                <button class="field-order-btn landscape-field" onclick="generateFieldOrder('landscape')">
+                    <i class="fas fa-file-alt"></i> Field Order
+                </button>
+            </div>
+            
+            <div class="button-group">
+                <button class="category-btn maintenance-btn" onclick="handleCategoryClick('maintenance')">
+                    <i class="fas fa-tools"></i> Maintenance 
+                    <span id="maintenanceStatus" class="status-symbol"></span>
+                </button>
+                <button class="field-order-btn maintenance-field" onclick="generateFieldOrder('maintenance')">
+                    <i class="fas fa-file-alt"></i> Field Order
+                </button>
+            </div>
+            
+            <div class="button-group">
+                <button class="category-btn subcontract-btn" onclick="handleCategoryClick('subcontract')">
+                    <i class="fas fa-file-contract"></i> Subcontract 
+                    <span id="subcontractStatus" class="status-symbol"></span>
+                </button>
+                <button class="field-order-btn subcontract-field" onclick="generateFieldOrder('subcontract')">
+                    <i class="fas fa-file-alt"></i> Field Order
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="category-tabs">
+        <button class="tab-btn active" data-category="all">
+            All POs
+        </button>
+        <button class="tab-btn" data-category="drains">
+            Drains
+        </button>
+        <button class="tab-btn" data-category="irrigation">
+            Irrigation
+        </button>
+        <button class="tab-btn" data-category="landscape">
+            Landscape
+        </button>
+        <button class="tab-btn" data-category="maintenance">
+            Maintenance
+        </button>
+        <button class="tab-btn" data-category="subcontract">
+            Subcontract
+        </button>
+    </div>
+
+    <div id="purchaseOrdersList" class="purchase-orders-list">
+        <div class="po-section">
+            <h3>Completed Purchase Orders</h3>
+            
+            <!-- Removed the Sort By Description button and Search bar -->
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <button class="action-btn print-btn" onclick="printAllSelected()">
+                    <i class="fas fa-print"></i> Print All
+                </button>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>
+                            <input type="checkbox" id="selectAllCheckbox" onclick="toggleAllSelections(this)">
+                        </th>
+                        <th>PO Number</th>
+                        <th>Category</th>
+                        <th>Date Created</th>
+                        <th>Date Completed</th>
+                        <th># Items</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="completedPOTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .button-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .field-order-btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: white;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+    .field-order-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .drains-field { background: linear-gradient(135deg, #2980b9, #1f618d); }
+    .irrigation-field { background: linear-gradient(135deg, #27ae60, #1e8449); }
+    .landscape-field { background: linear-gradient(135deg, #f39c12, #d68910); }
+    .maintenance-field { background: linear-gradient(135deg, #c0392b, #922b21); }
+    .subcontract-field { background: linear-gradient(135deg, #8e44ad, #6c3483); }
+
+    .search-wrapper {
+        position: relative;
+        width: 100%;
+    }
+    .search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+    .search-result-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .search-result-item:last-child {
+        border-bottom: none;
+    }
+    .search-result-item:hover {
+        background-color: #f7fafc;
+    }
+    .result-job-number {
+        font-weight: 600;
+        color: #2c5282;
+        margin-bottom: 4px;
+    }
+    .result-project-name {
+        font-size: 0.9em;
+        color: #4a5568;
+        margin-bottom: 2px;
+    }
+    .result-details {
+        font-size: 0.8em;
+        color: #718096;
+    }
+    .content-container {
+        max-width: 1200px;
+        margin: 32px auto;
+        padding: 16px;
+    }
+    .search-container {
+        margin-bottom: 24px;
+    }
+    .search-bar {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 16px;
+        margin-bottom: 16px;
+    }
+    .job-details {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 24px;
+    }
+    .job-details h2 {
+        margin-top: 0;
+        color: #2c5282;
+    }
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .detail-item {
+        background: #f7fafc;
+        padding: 12px;
+        border-radius: 6px;
+    }
+    .detail-item strong {
+        display: block;
+        color: #4a5568;
+        margin-bottom: 4px;
+    }
+
+    .category-buttons {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+    .category-btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: white;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+    }
+    .category-btn i {
+        font-size: 16px;
+    }
+    .category-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .drains-btn { background: linear-gradient(135deg, #3498db, #2980b9); }
+    .irrigation-btn { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .landscape-btn { background: linear-gradient(135deg, #f1c40f, #f39c12); }
+    .maintenance-btn { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .subcontract-btn { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+
+    .status-symbol {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-left: 8px;
+    }
+
+    .category-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 8px;
+    }
+    .tab-btn {
+        padding: 8px 16px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #4a5568;
+        transition: all 0.3s;
+        position: relative;
+    }
+    .tab-btn::after {
+        content: '';
+        position: absolute;
+        bottom: -10px;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: transparent;
+        transition: all 0.3s;
+    }
+    .tab-btn.active {
+        color: #2c5282;
+    }
+    .tab-btn.active::after {
+        background: #2c5282;
+    }
+
+    .purchase-orders-list {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    .po-section {
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+    }
+    .po-section h3 {
+        color: #2c5282;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    th {
+        background-color: #3498db;
+        color: white;
+        font-weight: 500;
+    }
+    tr:hover {
+        background-color: #f8fafc;
+    }
+    .action-btn {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s;
+        color: white;
+        margin-right: 8px;
+        font-size: 12px;
+    }
+    .update-btn {
+        background: linear-gradient(135deg, #4CAF50, #45a049);
+    }
+    .remove-btn {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+    }
+    .print-btn {
+        background: linear-gradient(135deg, #666666, #333333);
+        margin-left: 4px;
+    }
+    .action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .no-results {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+        font-style: italic;
+    }
+    .amount-cell {
+        font-family: monospace;
+        text-align: right;
+    }
+    .items-count {
+        text-align: center;
+        font-family: monospace;
+    }
+</style>
+
+<script>
+    let allCompletedPOs = [];
+
+    async function generateFieldOrder(category) {
+        const jobNumber = document.getElementById('jobNumber').textContent;
+        if (!jobNumber) {
+            alert('Please search and select a job first.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/field-order/${jobNumber}/${category}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `field-order-${jobNumber}-${category}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Error generating field order:', error);
+            alert('Error generating field order');
+        }
+    }
+
+    async function printPO(poNumber) {
+        try {
+            const completeResponse = await fetch(`/api/purchase-orders/${poNumber}/generate-pdf?show_costs=true`);
+            if (!completeResponse.ok) {
+                throw new Error('Error generating complete PDF');
+            }
+            const completeBlob = await completeResponse.blob();
+            downloadBlob(completeBlob, `Complete Purchase Orders/PO_${poNumber}_complete.pdf`);
+
+            const noCostResponse = await fetch(`/api/purchase-orders/${poNumber}/generate-pdf?show_costs=false`);
+            if (!noCostResponse.ok) {
+                throw new Error('Error generating no-cost PDF');
+            }
+            const noCostBlob = await noCostResponse.blob();
+            downloadBlob(noCostBlob, `No Cost Purchase Orders/PO_${poNumber}_no_cost.pdf`);
+
+            alert('Both versions of the PO have been saved successfully.');
+        } catch (error) {
+            console.error('Error finalizing and saving PDFs:', error);
+            alert('Error saving purchase order PDFs');
+        }
+    }
+
+    async function printAllSelected() {
+        const selectedBoxes = document.querySelectorAll('.po-checkbox:checked');
+        if (!selectedBoxes.length) {
+            alert('No Purchase Orders selected.');
+            return;
+        }
+
+        for (const checkbox of selectedBoxes) {
+            const poNumber = checkbox.value;
+            try {
+                const completeResponse = await fetch(`/api/purchase-orders/${poNumber}/generate-pdf?show_costs=true`);
+                if (!completeResponse.ok) {
+                    console.error(`Error generating complete PDF for PO ${poNumber}`);
+                    continue;
+                }
+                const completeBlob = await completeResponse.blob();
+                downloadBlob(completeBlob, `PO_${poNumber}_complete.pdf`);
+
+                const noCostResponse = await fetch(`/api/purchase-orders/${poNumber}/generate-pdf?show_costs=false`);
+                if (!noCostResponse.ok) {
+                    console.error(`Error generating no-cost PDF for PO ${poNumber}`);
+                    continue;
+                }
+                const noCostBlob = await noCostResponse.blob();
+                downloadBlob(noCostBlob, `PO_${poNumber}_no_cost.pdf`);
+            } catch (error) {
+                console.error(`Error printing PO ${poNumber}`, error);
+            }
+        }
+
+        alert('All selected POs have been processed for printing.');
+    }
+
+    function downloadBlob(blob, filename) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('jobSearch');
+        const searchResults = document.getElementById('searchResults');
+        let searchTimeout;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const searchQuery = urlParams.get('search');
+        const jobId = urlParams.get('job_id');
+
+        if (searchQuery) {
+            searchInput.value = searchQuery;
+            performSearch(searchQuery);
+        }
+
+        if (jobId) {
+            searchInput.value = jobId;
+            searchJob(jobId);
+        }
+
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            if (!query) {
+                searchResults.style.display = 'none';
+                document.getElementById('jobDetails').style.display = 'none';
+                document.getElementById('completedPOTableBody').innerHTML = '';
+                return;
+            }
+            searchTimeout = setTimeout(() => {
+                performSearch(query);
+            }, 300);
+        });
+
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                const currentJobNumber = document.getElementById('jobNumber').textContent;
+                if (currentJobNumber) {
+                    fetchPurchaseOrders(currentJobNumber, button.dataset.category);
+                }
+            });
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.style.display = 'none';
+            }
+        });
+    });
+
+    async function performSearch(query) {
+        if (!query) return;
+        try {
+            const response = await fetch(`/api/search-jobs?q=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            if (data.success && data.jobs.length > 0) {
+                displaySearchResults(data.jobs);
+            } else {
+                document.getElementById('searchResults').style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error searching:', error);
+            document.getElementById('searchResults').style.display = 'none';
+        }
+    }
+
+    function displaySearchResults(jobs) {
+        const searchResults = document.getElementById('searchResults');
+        searchResults.innerHTML = jobs.map(job => `
+            <div class="search-result-item" onclick="selectJob('${job.job_number}')">
+                <div class="result-job-number">${job.job_number}</div>
+                <div class="result-project-name">${job.project_name}</div>
+                <div class="result-details">
+                    ${job.customer_name} • ${job.project_address}
+                </div>
+            </div>
+        `).join('');
+        searchResults.style.display = 'block';
+    }
+
+    function selectJob(jobNumber) {
+        document.getElementById('searchResults').style.display = 'none';
+        searchJob(jobNumber);
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('job_id', jobNumber);
+        window.history.pushState({}, '', newUrl);
+    }
+
+    function searchJob(jobNumber) {
+        if (!jobNumber) return;
+        fetch(`/api/job/${jobNumber}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    displayJobDetails(data.job);
+                    fetchPurchaseOrders(jobNumber, 'all', updateCategoryStatuses);
+                } else {
+                    document.getElementById('jobDetails').style.display = 'none';
+                    document.getElementById('completedPOTableBody').innerHTML = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error searching for job:', error);
+                document.getElementById('jobDetails').style.display = 'none';
+                document.getElementById('completedPOTableBody').innerHTML = '';
+            });
+    }
+
+    function displayJobDetails(job) {
+        const jobDetails = document.getElementById('jobDetails');
+        jobDetails.style.display = 'block';
+        document.getElementById('jobNumber').textContent = job.job_number || 'N/A';
+        document.getElementById('projectName').textContent = job.project_name || 'N/A';
+        document.getElementById('customerName').textContent = job.customer_name || 'N/A';
+        document.getElementById('projectAddress').textContent = job.project_address || 'N/A';
+    }
+
+    function fetchPurchaseOrders(jobNumber, category = 'all', callback) {
+        fetch(`/api/purchase-orders/${jobNumber}?category=${category}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    if (category === 'all') {
+                        allCompletedPOs = data.purchase_orders.filter(po => po.status === 'completed');
+                    }
+                    displayPurchaseOrders(data.purchase_orders);
+                    if (callback) callback(data.purchase_orders);
+                } else {
+                    displayPurchaseOrders([]);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching purchase orders:', error);
+                displayPurchaseOrders([]);
+            });
+    }
+
+    function updateCategoryStatuses(purchaseOrders) {
+        const categories = ['drains', 'irrigation', 'landscape', 'maintenance', 'subcontract'];
+        categories.forEach(category => {
+            const statusElement = document.getElementById(`${category}Status`);
+            const inProgressPO = purchaseOrders.find(po => po.category === category && po.status === 'in_progress');
+            if (inProgressPO) {
+                statusElement.classList.remove('status-inactive');
+                statusElement.classList.add('status-active');
+                statusElement.style.backgroundColor = '#2ecc71';
+                statusElement.title = 'Purchase Order in Progress';
+            } else {
+                statusElement.classList.remove('status-active');
+                statusElement.classList.add('status-inactive');
+                statusElement.style.backgroundColor = '#e74c3c';
+                statusElement.title = 'No Purchase Order in Progress';
+            }
+        });
+    }
+
+    function displayPurchaseOrders(purchaseOrders) {
+        document.getElementById('completedPOTableBody').innerHTML = '';
+        if (!purchaseOrders || purchaseOrders.length === 0) {
+            return;
+        }
+        const completedPOs = purchaseOrders.filter(po => po.status === 'completed');
+        const tbody = document.getElementById('completedPOTableBody');
+        completedPOs.forEach(po => {
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td>
+                    <input type="checkbox" class="po-checkbox" value="${po.po_number}" />
+                </td>
+                <td>${po.po_number}</td>
+                <td>${po.category}</td>
+                <td>${new Date(po.date_created).toLocaleDateString()}</td>
+                <td>${po.finalized_at ? new Date(po.finalized_at).toLocaleDateString() : 'N/A'}</td>
+                <td class="items-count">${po.items_count || 0}</td>
+                <td class="amount-cell">$${(po.amount || 0).toFixed(2)}</td>
+                <td>${po.description ? po.description : ''}</td>
+                <td>
+                    <button class="action-btn update-btn" onclick="updatePO('${po.po_number}')">
+                        <i class="fas fa-search"></i> View/Update
+                    </button>
+                    <button class="action-btn remove-btn" onclick="removePO('${po.po_number}')">
+                        <i class="fas fa-trash"></i> Remove
+                    </button>
+                    <button class="action-btn print-btn" onclick="printPO('${po.po_number}')">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                </td>
+            `;
+        });
+    }
+
+    // Removed sortByDescription() and filterByDescription() 
+    // since the corresponding UI elements have been removed.
+
+    function toggleAllSelections(checkbox) {
+        const allRowCheckboxes = document.querySelectorAll('.po-checkbox');
+        allRowCheckboxes.forEach(cb => {
+            cb.checked = checkbox.checked;
+        });
+    }
+
+    function handleCategoryClick(category) {
+        const jobNumber = document.getElementById('jobNumber').textContent;
+        if (!jobNumber) {
+            alert('Please search and select a job first.');
+            return;
+        }
+        fetch(`/api/purchase-orders/${jobNumber}?category=${category}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.message || 'Error fetching purchase orders');
+                }
+                const inProgressPO = data.purchase_orders.find(po => 
+                    po.status === 'in_progress' && po.category === category
+                );
+                if (inProgressPO) {
+                    window.location.href = `/create-purchase-order/${inProgressPO.po_number}`;
+                } else {
+                    fetch(`/api/purchase-orders/next-number/${jobNumber}/${category}`)
+                        .then(res => res.json())
+                        .then(nextPoData => {
+                            if (nextPoData.success) {
+                                window.location.href = `/create-purchase-order/${nextPoData.next_po_number}`;
+                            } else {
+                                throw new Error('Error generating PO number');
+                            }
+                        });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error processing request');
+            });
+    }
+
+    function resumePO(poNumber) {
+        window.location.href = `/create-purchase-order/${poNumber}`;
+    }
+
+    function updatePO(poNumber) {
+        fetch(`/api/purchase-order/${poNumber}/reopen`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                console.warn('Warning:', data.message);
+            }
+            window.location.href = `/update-purchase-order/${poNumber}`;
+        })
+        .catch(error => {
+            console.error('Error reopening PO:', error);
+            window.location.href = `/update-purchase-order/${poNumber}`;
+        });
+    }
+
+    function removePO(poNumber) {
+        if (confirm('Are you sure you want to remove this purchase order?')) {
+            fetch(`/api/purchase-orders/${poNumber}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const jobNumber = document.getElementById('jobNumber').textContent;
+                    const activeTab = document.querySelector('.tab-btn.active');
+                    fetchPurchaseOrders(jobNumber, activeTab.dataset.category);
+                    fetchPurchaseOrders(jobNumber, 'all', updateCategoryStatuses);
+                } else {
+                    alert('Error removing purchase order: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error removing purchase order');
+            });
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,376 @@
+{% extends "layout.html" %}
+
+{% block title %}Customer Management - Price Book{% endblock %}
+
+{% block additional_styles %}
+<style>
+    .section {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .section h2 {
+        color: var(--primary-color);
+        margin-bottom: 20px;
+        font-size: 24px;
+        border-bottom: 2px solid var(--primary-color);
+        padding-bottom: 10px;
+    }
+
+    #customerForm {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    #customerForm input, #customerForm button {
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+    }
+
+    #customerForm button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+    #customerForm button:hover {
+        background-color: var(--hover-color);
+    }
+
+    #searchInput {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+        margin-bottom: 20px;
+    }
+
+    #customersTable {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    #customersTable th, #customersTable td {
+        text-align: left;
+        padding: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    #customersTable th {
+        background-color: var(--primary-color);
+        color: white;
+    }
+
+    .button-container {
+        display: flex;
+        gap: 8px;
+    }
+
+    .button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background-color 0.3s, transform 0.3s;
+        text-decoration: none;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .edit-button {
+        background: linear-gradient(135deg, #3498db, #2ecc71);
+    }
+
+    .delete-button {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+    }
+
+    .save-button {
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+    }
+
+    .cancel-button {
+        background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+    }
+
+    .button:hover {
+        transform: translateY(-2px);
+    }
+
+    .editable-input {
+        width: 100%;
+        padding: 5px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    .pagination a {
+        padding: 8px 16px;
+        text-decoration: none;
+        border: 1px solid var(--border-color);
+        color: var(--text-color);
+        margin: 0 4px;
+        border-radius: 4px;
+        transition: background-color 0.3s ease;
+    }
+
+    .pagination a:hover:not(.active) {
+        background-color: var(--primary-color);
+        color: white;
+    }
+
+    .pagination .active {
+        background-color: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
+
+<div class="section">
+    <h2>Add/Edit Customer</h2>
+    <form id="customerForm" method="POST" action="{{ url_for('customer_management') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="customer_name" id="customerName" placeholder="Customer Name" required>
+        <input type="text" name="customer_address" id="customerAddress" placeholder="Address">
+        <input type="text" name="customer_state" id="customerState" placeholder="State">
+        <input type="text" name="customer_city" id="customerCity" placeholder="City">
+        <input type="text" name="customer_zip" id="customerZip" placeholder="ZIP Code">
+        <button type="submit">Submit</button>
+    </form>
+</div>
+
+<div class="section">
+    <h2>Search Customers</h2>
+    <input type="search" id="searchInput" placeholder="Search by Customer Name or City" oninput="filterCustomers()">
+</div>
+
+<div class="section">
+    <h2>Existing Customers</h2>
+    {% if customers %}
+        <table id="customersTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>State</th>
+                    <th>City</th>
+                    <th>ZIP</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for customer in customers %}
+                <tr data-customer-name="{{ customer.customer_name }}">
+                    <td>{{ customer.customer_name }}</td>
+                    <td>{{ customer.customer_address or 'N/A' }}</td>
+                    <td>{{ customer.customer_state or 'N/A' }}</td>
+                    <td>{{ customer.customer_city or 'N/A' }}</td>
+                    <td>{{ customer.customer_zip or 'N/A' }}</td>
+                    <td>
+                        <div class="button-container">
+                            <button onclick="editCustomer('{{ customer.customer_name }}')" class="button edit-button">Edit</button>
+                            <button onclick="deleteCustomer('{{ customer.customer_name }}')" class="button delete-button">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No customers found.</p>
+    {% endif %}
+
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('customer_management', page=page-1) }}">&laquo; Previous</a>
+        {% endif %}
+        
+        {% for p in range(1, pages + 1) %}
+            {% if p == page %}
+                <a href="#" class="active">{{ p }}</a>
+            {% else %}
+                <a href="{{ url_for('customer_management', page=p) }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if page < pages %}
+            <a href="{{ url_for('customer_management', page=page+1) }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+    
+    <p>Showing {{ customers|length }} of {{ total_customers }} total customers</p>
+</div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script>
+    function filterCustomers() {
+        var input, filter, table, tr, td, i, txtValue;
+        input = document.getElementById('searchInput');
+        filter = input.value.toLowerCase();
+        table = document.getElementById('customersTable');
+        tr = table.getElementsByTagName('tr');
+
+        for (i = 1; i < tr.length; i++) {
+            tr[i].style.display = 'none';
+            td = tr[i].getElementsByTagName('td');
+            for (var j = 0; j < td.length; j++) {
+                if (td[j]) {
+                    txtValue = td[j].textContent || td[j].innerText;
+                    if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                        tr[i].style.display = '';
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    function editCustomer(customerName) {
+        var row = document.querySelector('tr[data-customer-name="' + customerName + '"]');
+        var cells = row.getElementsByTagName('td');
+
+        for (var i = 0; i < cells.length - 1; i++) {
+            var cell = cells[i];
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.value = cell.innerText;
+            input.setAttribute('data-original-value', cell.innerText);
+            input.className = 'editable-input';
+            cell.innerText = '';
+            cell.appendChild(input);
+        }
+
+        var buttonContainer = row.querySelector('.button-container');
+        buttonContainer.innerHTML = `
+            <button class="button save-button" onclick="saveCustomer(this)">Save</button>
+            <button class="button cancel-button" onclick="cancelEdit(this, '${customerName}')">Cancel</button>
+        `;
+    }
+
+    function saveCustomer(button) {
+        var row = button.closest('tr');
+        var inputs = row.querySelectorAll('input');
+        var customerData = {};
+        var originalName = row.getAttribute('data-customer-name');
+
+        inputs.forEach(function(input, index) {
+            var column = ['customer_name', 'customer_address', 'customer_state', 'customer_city', 'customer_zip'][index];
+            customerData[column] = input.value;
+        });
+
+        var isRenaming = originalName !== customerData.customer_name;
+
+        var url = isRenaming 
+            ? '/api/customer/rename/' + encodeURIComponent(originalName)
+            : '/api/customer/' + encodeURIComponent(originalName);
+
+        fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.getElementById('csrf_token').value
+            },
+            body: JSON.stringify(customerData)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.message || 'Failed to save changes');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                inputs.forEach(function(input, index) {
+                    input.parentElement.innerText = input.value;
+                });
+                row.setAttribute('data-customer-name', customerData.customer_name);
+                restoreEditDeleteButtons(row, customerData.customer_name);
+                showAlert('success', 'Customer updated successfully');
+            } else {
+                throw new Error(data.message || 'Failed to save changes');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('error', error.message || 'An error occurred while saving changes');
+            inputs.forEach(function(input, index) {
+                var originalValue = input.getAttribute('data-original-value') || 'N/A';
+                input.parentElement.innerText = originalValue;
+            });
+            restoreEditDeleteButtons(row, originalName);
+        });
+    }
+
+    function cancelEdit(button, customerName) {
+        var row = button.closest('tr');
+        var inputs = row.querySelectorAll('input');
+        inputs.forEach(function(input) {
+            input.parentElement.innerText = input.getAttribute('data-original-value');
+        });
+        restoreEditDeleteButtons(row, customerName);
+    }
+
+    function restoreEditDeleteButtons(row, customerName) {
+        var buttonContainer = row.querySelector('.button-container');
+        if (buttonContainer) {
+            buttonContainer.innerHTML = `
+                <button onclick="editCustomer('${customerName}')" class="button edit-button">Edit</button>
+                <button onclick="deleteCustomer('${customerName}')" class="button delete-button">Delete</button>
+            `;
+        }
+    }
+    function deleteCustomer(customerName) {
+        if (confirm('Are you sure you want to delete this customer?')) {
+            fetch(`/delete_customer/${encodeURIComponent(customerName)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    // Remove the customer row from the table
+                    document.querySelector(`tr[data-customer-name="${customerName}"]`).remove();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the customer.');
+            });
+        }
+    }
+</script>
+{% endblock %}
+</body>
+</html>

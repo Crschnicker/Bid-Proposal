@@ -1,0 +1,113 @@
+import pandas as pd
+import psycopg2
+import os
+from datetime import datetime
+
+def clean_factor_code(x):
+    if pd.isna(x) or str(x).strip() == '':
+        return None
+    # Clean the factor code string
+    value = str(x).strip()
+    # If it ends with .0, remove the decimal portion
+    if value.endswith('.0'):
+        return value.split('.')[0]
+    return value
+
+def update_labor_hours():
+    print("Starting labor hours update process...")
+    conn = None
+    skipped_items = []
+    
+    try:
+        # Read the CSV file
+        csv_path = r'C:\Users\Dev PC\Documents\GitHub\Bid-Proposal\static\FactorUpdate.csv'
+        df = pd.read_csv(csv_path)
+        print(f"Loaded {len(df)} items from CSV file")
+        
+        # Clean factor codes
+        df['Factor Code'] = df['Factor Code'].apply(clean_factor_code)
+        
+        # Database connection
+        conn = psycopg2.connect(
+            dbname="flask_bids",
+            user="Rclick@pricebookdb",  # Update with your username
+            password="Tall99Tower",  # Update with your password
+            host="pricebookdb.postgres.database.azure.com"
+        )
+        cur = conn.cursor()
+        
+        # Get existing factor codes
+        cur.execute("SELECT factor_code FROM factor_code")
+        existing_codes = {str(row[0]) for row in cur.fetchall()}
+        print(f"Found {len(existing_codes)} existing factor codes in database")
+        
+        successful_updates = 0
+        
+        # Process each row
+        for _, row in df.iterrows():
+            factor_code = row['Factor Code']
+            labor_hours = row['Labor Hours']
+            skip_reason = None
+            
+            # Validate the row
+            if factor_code not in existing_codes:
+                skip_reason = f"Factor code does not exist in database: {factor_code}"
+            
+            if skip_reason:
+                skipped_row = row.to_dict()
+                skipped_row['Reason'] = skip_reason
+                skipped_items.append(skipped_row)
+                continue
+            
+            # Update valid item
+            update_query = """
+                UPDATE factor_code
+                SET labor_hours = %s
+                WHERE factor_code = %s
+            """
+            try:
+                cur.execute(update_query, (labor_hours, factor_code))
+                conn.commit()
+                successful_updates += 1
+                
+                if successful_updates % 50 == 0:  # Print progress every 50 items
+                    print(f"Processed {successful_updates} updates")
+                    
+            except Exception as e:
+                conn.rollback()
+                skipped_row = row.to_dict()
+                skipped_row['Reason'] = f"Database error: {str(e)}"
+                skipped_items.append(skipped_row)
+        
+        print(f"\nSuccessfully updated {successful_updates} factor codes")
+        
+        # Save skipped items to CSV if any
+        if skipped_items:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_path = os.path.dirname(csv_path)
+            skipped_file = os.path.join(base_path, f'skipped_updates_{timestamp}.csv')
+            skipped_df = pd.DataFrame(skipped_items)
+            # Reorder columns to put Reason first
+            cols = ['Reason'] + [col for col in skipped_df.columns if col != 'Reason']
+            skipped_df = skipped_df[cols]
+            skipped_df.to_csv(skipped_file, index=False)
+            print(f"Saved {len(skipped_items)} skipped items to: {skipped_file}")
+            
+            # Print summary of reasons
+            print("\nSkipped items summary:")
+            reason_counts = skipped_df['Reason'].value_counts()
+            for reason, count in reason_counts.items():
+                print(f"- {reason}: {count} items")
+            
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        if conn is not None:
+            conn.rollback()
+    finally:
+        if conn is not None:
+            if 'cur' in locals():
+                cur.close()
+            conn.close()
+
+if __name__ == "__main__":
+    update_labor_hours()

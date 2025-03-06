@@ -1,0 +1,509 @@
+{% extends "layout.html" %}
+
+{% block title %}User Management - Price Book{% endblock %}
+
+{% block additional_styles %}
+<style>
+    /* Root variables to match login page */
+    :root {
+        --primary-color: #3498db;
+        --secondary-color: #2ecc71;
+        --background-color: #f5f7fa;
+        --text-color: #34495e;
+        --border-color: #bdc3c7;
+        --hover-color: #2980b9;
+        --delete-color: #e74c3c;
+        --delete-hover-color: #c0392b;
+    }
+
+    /* Update form layout */
+    #userForm {
+        display: grid;
+        grid-template-columns: 2fr 0.8fr 0.8fr;
+        gap: 10px;
+        align-items: start;
+        margin-bottom: 20px;
+    }
+
+    /* Password container specific styles */
+    .password-input-container {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        grid-column: span 3;
+    }
+
+    .password-input-container input {
+        width: 100%;
+        min-width: 250px;
+    }
+
+    /* Username input */
+    #userForm input[name="username"] {
+        width: 100%;
+        grid-column: span 3;
+    }
+
+    /* Role select and Add User button */
+    #userForm select[name="role"] {
+        width: 150px;
+    }
+
+    #userForm button[type="submit"] {
+        width: 150px;
+    }
+
+    /* Form elements styling */
+    #userForm input,
+    #userForm select,
+    #userForm button,
+    .edit-input {
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+        background-color: white;
+        color: var(--text-color);
+    }
+
+    /* Button styles */
+    .button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        color: white;
+        background-color: var(--primary-color);
+    }
+
+    .button:hover {
+        background-color: var(--hover-color);
+    }
+
+    /* Password toggle button */
+    .password-toggle {
+        padding: 10px !important;
+        width: 40px;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #generatePasswordBtn {
+        white-space: nowrap;
+    }
+
+    /* User table styles */
+    .user-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-table th,
+    .user-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .user-table th {
+        background-color: var(--background-color);
+        font-weight: 500;
+        color: var(--text-color);
+    }
+
+    /* Button container in table */
+    .button-container {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    /* Specific button types */
+    .edit-button {
+        background-color: var(--secondary-color);
+    }
+
+    .edit-button:hover {
+        background-color: #27ae60;
+    }
+
+    .delete-button {
+        background-color: var(--delete-color);
+    }
+
+    .delete-button:hover {
+        background-color: var(--delete-hover-color);
+    }
+
+    .save-button {
+        background-color: var(--secondary-color);
+    }
+
+    .save-button:hover {
+        background-color: #27ae60;
+    }
+
+    .cancel-button {
+        background-color: var(--delete-color);
+    }
+
+    .cancel-button:hover {
+        background-color: var(--delete-hover-color);
+    }
+
+    /* Role badges */
+    .user-role {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .role-admin {
+        background-color: #3498db30;
+        color: var(--primary-color);
+    }
+
+    .role-staff {
+        background-color: #2ecc7130;
+        color: var(--secondary-color);
+    }
+
+    /* Alert styles */
+    .alert {
+        padding: 15px;
+        margin-bottom: 20px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .alert-success {
+        color: #3c763d;
+        background-color: #dff0d8;
+        border-color: #d6e9c6;
+    }
+
+    .alert-error {
+        color: #a94442;
+        background-color: #f2dede;
+        border-color: #ebccd1;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        #userForm {
+            grid-template-columns: 1fr;
+        }
+        
+        #userForm input[name="username"],
+        .password-input-container {
+            grid-column: 1;
+        }
+        
+        .password-input-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .button-container {
+            flex-direction: column;
+        }
+        
+        .button {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if current_user.is_super_admin or current_user.is_admin %}
+        <h2>Add New User</h2>
+        {% if current_user.is_super_admin %}
+            <form id="userForm" method="POST" action="{{ url_for('manage_users') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <div class="password-input-container">
+                    <input type="password" name="password" id="password" placeholder="Password" required>
+                    <button type="button" id="generatePasswordBtn" class="button">Generate Password</button>
+                    <button type="button" class="password-toggle button">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <select name="role" required>
+                    <option value="" disabled selected>Select Role</option>
+                    <option value="admin">Admin</option>
+                    <option value="staff">Staff</option>
+                </select>
+                <button type="submit">Add User</button>
+            </form>
+        {% elif current_user.is_admin %}
+            <form id="userForm" method="POST" action="{{ url_for('manage_users') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <div class="password-input-container">
+                    <input type="password" name="password" id="password" placeholder="Password" required>
+                    <button type="button" id="generatePasswordBtn" class="button">Generate Password</button>
+                    <button type="button" class="password-toggle button">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <select name="role" required>
+                    <option value="" disabled selected>Select Role</option>
+                    <option value="staff">Staff</option>
+                </select>
+                <button type="submit">Add User</button>
+            </form>
+        {% endif %}
+    {% endif %}
+</div>
+<div class="section">
+    <h2>User Management</h2>
+    <table class="user-table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Last Login</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr data-user-id="{{ user.id }}">
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td>
+                    <span class="user-role {% if user.is_admin %}role-admin{% else %}role-staff{% endif %}">
+                        {{ "Admin" if user.is_admin else "Staff" }}
+                    </span>
+                </td>
+                <td>
+                    <span class="last-login">
+                        {% if user.last_login %}
+                            {{ user.last_login.strftime('%Y-%m-%d %H:%M:%S') }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </span>
+                </td>
+                <td>
+                    <div class="button-container">
+                        {% if (current_user.is_super_admin) or (current_user.is_admin and not user.is_admin and not user.is_super_admin) %}
+                            <button class="button edit-button" onclick="editUser({{ user.id }})">Edit</button>
+                            <button class="button delete-button" onclick="deleteUser({{ user.id }})">Delete</button>
+                            <button class="button save-button" onclick="resetPassword({{ user.id }})">Reset Password</button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const userForm = document.getElementById('userForm');
+        const alerts = document.querySelectorAll('.alert');
+    
+        // Auto-hide alerts after 5 seconds
+        alerts.forEach(alert => {
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        });
+    
+        if (userForm) {
+            userForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                const formData = new FormData(this);
+    
+                fetch('/manage-users', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showAlert('success', data.message);
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        showAlert('error', data.message);
+                    }
+                })
+                .catch(error => {
+                    showAlert('error', 'An error occurred while adding the user.');
+                });
+            });
+        }
+    });
+
+function editUser(userId) {
+    const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+    const username = row.cells[0].textContent;
+    const email = row.cells[1].textContent;
+    const role = row.cells[2].querySelector('.user-role').textContent.trim();
+
+    row.innerHTML = `
+        <td>
+            <input type="text" value="${username}" class="edit-input" name="username">
+        </td>
+        <td>
+            <input type="email" value="${email}" class="edit-input" name="email">
+        </td>
+        <td>
+            <select name="role" class="edit-input">
+                <option value="admin" ${role === 'Admin' ? 'selected' : ''}>Admin</option>
+                <option value="staff" ${role === 'Staff' ? 'selected' : ''}>Staff</option>
+            </select>
+        </td>
+        <td>${row.cells[3].innerHTML}</td>
+        <td>
+            <div class="button-container">
+                <button class="button save-button" onclick="saveUser(${userId})">Save</button>
+                <button class="button cancel-button" onclick="cancelEdit(${userId})">Cancel</button>
+            </div>
+        </td>
+    `;
+}
+function saveUser(userId) {
+    const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+    const username = row.querySelector('input[name="username"]').value;
+    const email = row.querySelector('input[name="email"]').value;
+    const role = row.querySelector('select[name="role"]').value;
+
+    fetch('/update-user', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+        },
+        body: JSON.stringify({
+            user_id: userId,
+            username: username,
+            email: email,
+            role: role
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'User updated successfully');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showAlert('error', data.message);
+        }
+    })
+    .catch(error => {
+        showAlert('error', 'An error occurred while updating the user');
+    });
+}
+function deleteUser(userId) {
+    if (confirm('Are you sure you want to delete this user?')) {
+        fetch('/delete-user', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+            },
+            body: JSON.stringify({
+                user_id: userId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', 'User deleted successfully');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                showAlert('error', data.message);
+            }
+        })
+        .catch(error => {
+            showAlert('error', 'An error occurred while deleting the user');
+        });
+    }
+}
+
+function resetPassword(userId) {
+    if (confirm('Are you sure you want to reset this user\'s password? A new password will be generated.')) {
+        fetch('/reset-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+            },
+            body: JSON.stringify({
+                user_id: userId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Create a temporary input to copy the password
+                const tempInput = document.createElement('input');
+                tempInput.value = data.password;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                
+                // Show success message with the new password
+                showAlert('success', `Password reset successfully. New password has been copied to clipboard: ${data.password}`);
+            } else {
+                showAlert('error', data.message);
+            }
+        })
+        .catch(error => {
+            showAlert('error', 'An error occurred while resetting the password');
+        });
+    }
+}
+
+function cancelEdit(userId) {
+    window.location.reload();
+}
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type}`;
+    alertDiv.textContent = message;
+    
+    const section = document.querySelector('.section');
+    section.insertBefore(alertDiv, section.firstChild);
+    
+    alertDiv.style.display = 'block';
+    setTimeout(() => {
+        alertDiv.style.display = 'none';
+    }, 5000);
+}
+</script>
+{% endblock %}

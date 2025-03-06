@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <title>Add or Update Bid</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/path/to/your/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="styles.css"> <!-- External CSS file for styles -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 </head>
 <body>
@@ -10,39 +13,109 @@
     <form id="bidForm">
         <div>
             <label for="BidID">Bid ID (Name):</label>
-            <input type="text" id="BidID" name="BidID" required>
+            <input type="text" id="BidID" name="BidID" required placeholder="Enter Bid ID or Name" aria-labelledby="BidID">
             <button type="button" id="checkBid">Check Bid</button>
         </div>
-        <!-- Placeholder for additional form fields -->
+        <!-- Part Number with dropdown for search results -->
+        <div class="dropdown">
+            <label for="PartNum">Part Number:</label>
+            <input type="text" id="PartNum" name="PartNum" autocomplete="off" placeholder="Enter Part Number" aria-labelledby="PartNum">
+            <div id="partDropdown" class="dropdown-content"></div>
+        </div>
+        <div>
+            <label for="Description">Description:</label>
+            <input type="text" id="Description" name="Description" readonly aria-labelledby="Description">
+        </div>
+        <div>
+            <label for="Cost">Cost:</label>
+            <input type="text" id="Cost" name="Cost" readonly aria-labelledby="Cost">
+        </div>
+        <div>
+            <label for="FactorCode">Factor Code:</label>
+            <input type="text" id="FactorCode" name="FactorCode" readonly aria-labelledby="FactorCode">
+        </div>
         <br>
         <input type="button" id="submitForm" value="Submit">
+        <button type="button" id="saveCloseBtn">Save and Close</button>
     </form>
 
     <script>
-        $(document).ready(function() {
+        document.addEventListener('DOMContentLoaded', function() {
+            var saveCloseBtn = document.getElementById('saveCloseBtn');
+            if (saveCloseBtn) {
+                saveCloseBtn.addEventListener('click', function() {
+                    // Your code here
+                    console.log('Save and Close button clicked');
+                });
+            } else {
+                console.error('Element with id "saveCloseBtn" not found.');
+            }
+
+            // Function to autofill other fields based on part details
+            function autofillDetails(part) {
+                $('#Description').val(part.description);
+                $('#Cost').val(part.cost);
+                $('#FactorCode').val(part.factor_code);
+            }
+
+            // Event handler for the part number input
+            $('#PartNum').on('input', function() {
+                var query = $(this).val();
+                if (query.length > 0) {
+                    $.ajax({
+                        url: '/search-parts',  // Server endpoint to search parts
+                        type: 'GET',
+                        data: { query: query },
+                        success: function(data) {
+                            var dropdown = $('#partDropdown');
+                            dropdown.empty();  // Clear existing dropdown content
+
+                            // Check if no parts are matched
+                            if (data.length === 0) {
+                                var noMatchDiv = $('<div>').text('No matching parts found');
+                                dropdown.append(noMatchDiv);
+                            } else {
+                                // Display each matched part in the dropdown
+                                data.forEach(function(part) {
+                                    var div = $('<div>').text(part.part_number + ' - ' + part.description);
+                                    div.on('click', function() {
+                                        $('#PartNum').val(part.part_number);
+                                        autofillDetails(part);
+                                        dropdown.empty();  // Clear the dropdown after selection
+                                    });
+                                    dropdown.append(div);
+                                });
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error fetching parts:', error);
+                        }
+                    });
+                } else {
+                    $('#partDropdown').empty();  // Clear the dropdown if input is empty
+                }
+            });
+
             $('#submitForm').click(function() {
-                var bidID = $('#BidID').val();
                 var formData = {
-                    bidID: bidID,
+                    bidID: $('#BidID').val(),
+                    partNum: $('#PartNum').val(),
+                    description: $('#Description').val(),
+                    cost: $('#Cost').val(),
+                    factorCode: $('#FactorCode').val()
                     // Add any additional form data here
                 };
 
-                // Check if we're updating an existing bid or creating a new one
-                var updateExisting = $('#updateExistingBid').is(':checked');
-                var formAction = updateExisting ? '/update-bid' : '/create-bid';
-
                 $.ajax({
-                    url: formAction,
+                    url: '/submit-bid',
                     type: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(formData),
                     success: function(response) {
-                        // Redirect or handle the response on success
                         console.log('Success:', response);
                         alert('Bid processed successfully!');
                     },
                     error: function(xhr, status, error) {
-                        // Handle any errors
                         console.error('Error:', error);
                         alert("An error occurred.");
                     }
@@ -59,7 +132,7 @@
                     data: JSON.stringify({ bidID: bidID }),
                     success: function(data) {
                         if (data.exists) {
-                            $('#updateExistingBid').prop('checked', true);
+                            alert("Bid exists. You can update it.");
                             autofillForm(data.details);
                         } else {
                             alert("Bid does not exist. Proceed to create a new bid.");
@@ -73,8 +146,11 @@
             });
 
             function autofillForm(details) {
-                // Autofill the form with bid details for updating
-                // Example: $('#someField').val(details.someField);
+                $('#PartNum').val(details.partNum);
+                $('#Description').val(details.description);
+                $('#Cost').val(details.cost);
+                $('#FactorCode').val(details.factorCode);
+                // Add autofill logic for other form fields as needed
             }
         });
     </script>

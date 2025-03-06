@@ -1,0 +1,569 @@
+{% extends "layout.html" %}
+
+{% block title %}Manage Groups - Price Book{% endblock %}
+
+{% block additional_styles %}
+<style>
+    :root {
+        --primary-color: #2c3e50;
+        --hover-color: #34495e;
+        --border-color: #ddd;
+    }
+
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #ecf0f1;
+    }
+
+    .section {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px auto;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        max-width: 1200px; 
+        width: 95%;
+    }
+
+    /* Increase width for the table section */
+    .table-section {
+        width: 99%;
+        max-width: 1500px;
+    }
+
+    .section h2 {
+        color: var(--primary-color);
+        margin-bottom: 20px;
+        font-size: 24px;
+        border-bottom: 2px solid var(--primary-color);
+        padding-bottom: 10px;
+    }
+
+    #groupForm {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .form-section {
+        display: grid;
+        gap: 15px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+
+    .form-section h3 {
+        grid-column: 1 / -1;
+        color: var(--primary-color);
+        font-size: 18px;
+        margin-bottom: 5px;
+    }
+
+    .address-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 10px;
+    }
+
+    #groupForm input, #groupForm select, #groupForm button {
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+
+    #groupForm button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        grid-column: 1 / -1;
+    }
+
+    #groupForm button:hover {
+        background-color: var(--hover-color);
+    }
+
+    .search-bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    #searchInput, #categoryFilter {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+
+    .table-wrapper {
+        margin-top: 20px;
+        overflow-x: auto;
+        font-size: 14px; /* Make table text smaller */
+    }
+
+    #groupsTable {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: auto; /* Allow columns to size based on content */
+    }
+
+    #groupsTable th, #groupsTable td {
+        text-align: left;
+        padding: 12px;
+        border-bottom: 1px solid var(--border-color);
+        white-space: normal; /* Allow text to wrap */
+        word-wrap: break-word; /* Ensure text doesn't overflow */
+        font-size: 14px; 
+    }
+
+    #groupsTable th {
+        background-color: var(--primary-color);
+        color: white;
+    }
+
+    .button-container {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s, transform 0.3s;
+        text-decoration: none;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .edit-button { background: linear-gradient(135deg, #3498db, #2ecc71); }
+    .delete-button { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .save-button { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .cancel-button { background: linear-gradient(135deg, #95a5a6, #7f8c8d); }
+
+    .button:hover {
+        transform: translateY(-2px);
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .pagination a {
+        padding: 8px 16px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        text-decoration: none;
+        font-size: 14px;
+    }
+
+    .pagination a.active {
+        background-color: var(--hover-color);
+    }
+
+    .pagination a:hover:not(.active) {
+        background-color: var(--hover-color);
+    }
+
+    .editable-input {
+        width: 100%;
+        padding: 5px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-size: 14px;
+    }
+
+    @media (max-width: 768px) {
+        .form-section {
+            grid-template-columns: 1fr;
+        }
+
+        .address-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section">
+    <h2>Add New Group Member</h2>
+    <form id="groupForm" method="POST" action="{{ url_for('manage_groups') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <!-- Basic Information -->
+        <div class="form-section">
+            <h3>Basic Information</h3>
+            <input type="text" name="name" placeholder="Contact Person Name" required>
+            <select name="category" required>
+                <option value="" disabled selected>Select Category</option>
+                <option value="Architect">Architect</option>
+                <option value="Engineer">Engineer</option>
+                <option value="Vendor">Vendor</option>
+            </select>
+            <input type="text" name="company" placeholder="Company Name" required>
+        </div>
+
+        <!-- Address Information -->
+        <div class="form-section">
+            <h3>Address</h3>
+            <input type="text" name="address1" placeholder="Street Address Line 1">
+            <input type="text" name="address2" placeholder="Street Address Line 2">
+            <div class="address-grid">
+                <input type="text" name="city" placeholder="City">
+                <input type="text" name="state" placeholder="State" maxlength="2">
+                <input type="text" name="zip_code" placeholder="ZIP Code" pattern="[0-9-]{5,10}">
+            </div>
+        </div>
+
+        <!-- Contact Information -->
+        <div class="form-section">
+            <h3>Contact Information</h3>
+            <input type="tel" name="phone_number" placeholder="Phone Number">
+            <input type="tel" name="fax_number" placeholder="Fax Number">
+            <input type="email" name="email" placeholder="Email Address">
+        </div>
+
+        <button type="submit">Add Member</button>
+    </form>
+</div>
+
+<div class="section table-section">
+    <h2>Existing Group Members</h2>
+    <div class="search-bar">
+        <input type="search" id="searchInput" placeholder="Search by Name, Company, Address or Phone Number">
+        <select id="categoryFilter">
+            <option value="">All Categories</option>
+            <option value="Architect">Architect</option>
+            <option value="Engineer">Engineer</option>
+            <option value="Vendor">Vendor</option>
+        </select>
+    </div>
+
+    <div class="table-wrapper">
+        <table id="groupsTable">
+            <thead>
+                <tr>
+                    <th>Contact Person</th>
+                    <th>Category</th>
+                    <th>Company</th>
+                    <th>Address</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>Phone</th>
+                    <th>Fax</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="groupsTableBody">
+                <!-- Rows will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="pagination" id="paginationContainer"></div>
+
+<script>
+    const allGroupMembers = JSON.parse('{{ all_group_members|tojson|safe }}');
+    console.log(allGroupMembers);
+    document.addEventListener('DOMContentLoaded', function() {
+        const groupForm = document.getElementById('groupForm');
+        const groupsTableBody = document.getElementById('groupsTableBody');
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+
+        // Client-side pagination variables
+        let currentPage = 1;
+        const rowsPerPage = 10;
+
+        // Initially render the table
+        renderTable(allGroupMembers);
+        renderPagination(allGroupMembers);
+
+        groupForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            var formData = new FormData(this);
+            fetch('/manage-groups', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', 'New member added successfully.');
+                    // Reload the page or re-fetch all members
+                    window.location.reload();
+                } else {
+                    const errorMessage = data.error || 'Unknown error occurred';
+                    showAlert('error', 'Failed to add new member: ' + errorMessage);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('error', 'An error occurred while adding new member: ' + error.message);
+            });
+        });
+
+        groupsTableBody.addEventListener('click', function(event) {
+            const target = event.target;
+            if (target.classList.contains('edit-button')) {
+                const memberId = target.closest('tr').dataset.memberId;
+                editGroupMember(memberId);
+            } else if (target.classList.contains('delete-button')) {
+                const row = target.closest('tr');
+                const memberId = row.dataset.memberId;
+                const category = row.querySelector('[data-field="category"]').textContent;
+                deleteGroupMember(memberId, category);
+            } else if (target.classList.contains('save-button')) {
+                const memberId = target.closest('tr').dataset.memberId;
+                saveChanges(memberId);
+            } else if (target.classList.contains('cancel-button')) {
+                const memberId = target.closest('tr').dataset.memberId;
+                cancelEdit(memberId);
+            }
+        });
+
+        searchInput.addEventListener('input', applyFilters);
+        categoryFilter.addEventListener('change', applyFilters);
+
+        function applyFilters() {
+            const filtered = filterMembers(allGroupMembers, searchInput.value, categoryFilter.value);
+            currentPage = 1; // reset to first page
+            renderTable(filtered);
+            renderPagination(filtered);
+        }
+
+        function filterMembers(members, searchQuery, category) {
+            searchQuery = searchQuery.toLowerCase().trim();
+            category = category.toLowerCase().trim();
+            return members.filter(m => {
+                const name = m.name.toLowerCase();
+                const comp = m.company.toLowerCase();
+                const addr = (m.address1 + " " + (m.address2 || "")).toLowerCase();
+                const phone = (m.phone_number || "").toLowerCase();
+                const cat = m.category.toLowerCase();
+
+                const matchesSearch = 
+                    name.includes(searchQuery) ||
+                    comp.includes(searchQuery) ||
+                    addr.includes(searchQuery) ||
+                    phone.includes(searchQuery);
+
+                const matchesCategory = category === '' || cat === category;
+
+                return matchesSearch && matchesCategory;
+            });
+        }
+
+        function renderTable(members) {
+            groupsTableBody.innerHTML = '';
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const pageMembers = members.slice(start, end);
+
+            for (let member of pageMembers) {
+                const row = document.createElement('tr');
+                row.dataset.memberId = member.id;
+                row.innerHTML = `
+                    <td>
+                        <span class="text-content" data-field="name">${member.name}</span>
+                        <input type="text" class="editable-input" data-field="name" value="${member.name}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="category">${member.category}</span>
+                        <select class="editable-input" data-field="category" style="display:none;">
+                            <option value="Architect" ${member.category == 'Architect' ? 'selected' : ''}>Architect</option>
+                            <option value="Engineer" ${member.category == 'Engineer' ? 'selected' : ''}>Engineer</option>
+                            <option value="Vendor" ${member.category == 'Vendor' ? 'selected' : ''}>Vendor</option>
+                        </select>
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="company">${member.company}</span>
+                        <input type="text" class="editable-input" data-field="company" value="${member.company}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="address1">${member.address1 || ''}</span>
+                        <input type="text" class="editable-input" data-field="address1" value="${member.address1 || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="city">${member.city || ''}</span>
+                        <input type="text" class="editable-input" data-field="city" value="${member.city || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="state">${member.state || ''}</span>
+                        <input type="text" class="editable-input" data-field="state" value="${member.state || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="phone_number">${member.phone_number || ''}</span>
+                        <input type="tel" class="editable-input" data-field="phone_number" value="${member.phone_number || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="fax_number">${member.fax_number || ''}</span>
+                        <input type="tel" class="editable-input" data-field="fax_number" value="${member.fax_number || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <span class="text-content" data-field="email">${member.email || ''}</span>
+                        <input type="email" class="editable-input" data-field="email" value="${member.email || ''}" style="display:none;">
+                    </td>
+                    <td>
+                        <div class="button-container">
+                            <button class="button edit-button">Edit</button>
+                            <button class="button delete-button">Delete</button>
+                        </div>
+                        <div class="edit-buttons" style="display:none;">
+                            <button class="button save-button">Save</button>
+                            <button class="button cancel-button">Cancel</button>
+                        </div>
+                    </td>
+                `;
+                groupsTableBody.appendChild(row);
+            }
+        }
+
+        function renderPagination(members) {
+            const paginationContainer = document.getElementById('paginationContainer');
+            paginationContainer.innerHTML = '';
+            const totalPages = Math.ceil(members.length / rowsPerPage);
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageLink = document.createElement('a');
+                pageLink.textContent = i;
+                pageLink.href = "#";
+                if (i === currentPage) {
+                    pageLink.classList.add('active');
+                }
+                pageLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    currentPage = i;
+                    renderTable(filterMembers(allGroupMembers, searchInput.value, categoryFilter.value));
+                    renderPagination(filterMembers(allGroupMembers, searchInput.value, categoryFilter.value));
+                });
+                paginationContainer.appendChild(pageLink);
+            }
+        }
+
+        function editGroupMember(memberId) {
+            const row = document.querySelector(`tr[data-member-id="${memberId}"]`);
+            if (!row) return;
+            row.querySelectorAll('.text-content').forEach(el => el.style.display = 'none');
+            row.querySelectorAll('.editable-input').forEach(el => el.style.display = '');
+            row.querySelector('.button-container').style.display = 'none';
+            row.querySelector('.edit-buttons').style.display = 'flex';
+        }
+
+        function cancelEdit(memberId) {
+            const row = document.querySelector(`tr[data-member-id="${memberId}"]`);
+            if (!row) return;
+            row.querySelectorAll('.text-content').forEach(el => el.style.display = '');
+            row.querySelectorAll('.editable-input').forEach(el => el.style.display = 'none');
+            row.querySelector('.button-container').style.display = 'flex';
+            row.querySelector('.edit-buttons').style.display = 'none';
+        }
+
+        function saveChanges(memberId) {
+            const row = document.querySelector(`tr[data-member-id="${memberId}"]`);
+            if (!row) return;
+            const formData = new FormData();
+            formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+            formData.append('member_id', memberId);
+
+            row.querySelectorAll('.editable-input').forEach(input => {
+                formData.append(input.dataset.field, input.value);
+            });
+
+            fetch('/manage-groups', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    row.querySelectorAll('.editable-input').forEach(input => {
+                        const textContent = row.querySelector(`.text-content[data-field="${input.dataset.field}"]`);
+                        if (textContent) {
+                            textContent.textContent = input.value;
+                        }
+                    });
+                    cancelEdit(memberId);
+                    showAlert('success', 'Member updated successfully.');
+                } else {
+                    showAlert('error', 'Failed to update member: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('error', 'An error occurred while updating the member.');
+            });
+        }
+
+        function deleteGroupMember(memberId, category) {
+            if (confirm('Are you sure you want to delete this member?')) {
+                fetch(`/delete-group-member/${memberId}/${category}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const row = document.querySelector(`tr[data-member-id="${memberId}"]`);
+                        if (row) row.remove();
+                        showAlert('success', 'Member deleted successfully.');
+                        const idx = allGroupMembers.findIndex(m => m.id == memberId);
+                        if (idx > -1) {
+                            allGroupMembers.splice(idx, 1);
+                            renderTable(filterMembers(allGroupMembers, searchInput.value, categoryFilter.value));
+                            renderPagination(filterMembers(allGroupMembers, searchInput.value, categoryFilter.value));
+                        }
+                    } else {
+                        showAlert('error', 'Failed to delete member: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showAlert('error', 'An error occurred while deleting the member.');
+                });
+            }
+        }
+
+        function showAlert(type, message) {
+            alert(message);
+        }
+    });
+</script>
+{% endblock %}
+</body>
+</html>
