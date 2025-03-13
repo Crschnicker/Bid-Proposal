@@ -1076,7 +1076,13 @@
                     <tr><th>City</th><td><input type="text" id="projectCity" value="{{ bid.project_city }}"></td></tr>
                     <tr><th>Zip Code</th><td><input type="text" id="projectZip" value="{{ bid.project_zip }}"></td></tr>
                     <tr><th>Point of Contact</th><td><input type="text" id="pointOfContact" value="{{ bid.point_of_contact }}"></td></tr>
-
+                    <tr>
+                        <th>Comments</th>
+                        <td>
+                            <textarea id="bidComments" rows="4" style="width: 100%; padding: 8px; resize: vertical;"
+                                placeholder="Enter any comments or notes about this bid...">{{ bid.comments }}</textarea>
+                        </td>
+                    </tr>
                 </table>
             </div>
             <div class="info-table-container">
@@ -1131,7 +1137,7 @@
                 </table>
             </div>
         </div>    
-    </div>        
+    </div>      
     <!-- Drains Section -->
     <div id="Drains" class="tabcontent">
         <h3>Drains</h3>
@@ -1879,6 +1885,7 @@
 
             document.body.appendChild(successModal);
         }
+        // Update the saveBid function to include comments
         function saveBid() {
             const csrfToken = getCsrfToken();
             if (!csrfToken) {
@@ -1928,7 +1935,8 @@
                     architect_name: getValueSafely('architectName'),
                     engineer_name: getValueSafely('engineerName'),
                     point_of_contact: getValueSafely('pointOfContact'),
-                    bid_amount: bidAmountValue
+                    bid_amount: bidAmountValue,
+                    comments: getValueSafely('bidComments') // Add this line for comments
                 },
                 labor_rates: {
                     drains_labor_rate: getFloatValueSafely('laborRateDrains'),
@@ -1945,6 +1953,7 @@
                     subcontractor: collectLineItems('subcontractorWrapper')
                 }
             };
+
 
             // If bid amount is non-zero, create a special line item
             if (bidAmountValue > 0) {
@@ -2627,14 +2636,15 @@
         let bidDataCache = null;
 
         
-        // Update other materials calculation to handle negative quantities
+
         function calculateOtherMaterials(category) {
             console.log(`Calculating other materials for category: ${category}`);
             var otherMaterials = [];
 
             var isSubBid = category.startsWith('subbid-');
+            var subBidId = isSubBid ? category.replace('subbid-', '') : null;
             var wrapperSelector = isSubBid ? 
-                `#subBid_${category.replace('subbid-', '')}` : 
+                `#subBid_${subBidId}` : 
                 `#${category.toLowerCase()}Wrapper`;
             console.log(`Using wrapper selector: ${wrapperSelector}`);
 
@@ -2644,24 +2654,42 @@
                 return otherMaterials;
             }
 
+            // Add debug logging
+            console.log(`Found ${wrapper.find('.itemsTable tbody tr').length} rows in the wrapper`);
+
             wrapper.find('.itemsTable tbody tr').each(function() {
-                var factorCode = $(this).find('.factorCodeInput').val();
-                var quantity = parseFloat($(this).find('.quantity input').val()) || 0;
+                var tr = $(this);
+                var factorCode = tr.find('.factorCodeInput').val();
+                var quantity = parseFloat(tr.find('.quantity input').val()) || 0;
                 var absQuantity = Math.abs(quantity); // Use absolute value for calculations
                 console.log(`Row data - Factor Code: ${factorCode}, Main Quantity: ${quantity}, Abs Quantity: ${absQuantity}`);
+
+                // Add debugging for the cache state
+                if (factorCode) {
+                    console.log(`Cache status for ${factorCode}: ${!!(window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode])}`);
+                    
+                    // If it's not in the cache, fetch it immediately
+                    if (!window.factorCodeItemsCache || !window.factorCodeItemsCache[factorCode]) {
+                        console.log(`Fetching missing factor code items for ${factorCode}`);
+                        // We're in an each() loop, so we need to use synchronous approach or a different pattern
+                        // For now, we'll just log this and handle it separately
+                    }
+                }
 
                 if (factorCode && window.factorCodeItemsCache && window.factorCodeItemsCache[factorCode]) {
                     console.log(`Processing items for factor code: ${factorCode}`);
                     window.factorCodeItemsCache[factorCode].forEach(item => {
                         var totalQuantity = (item.quantity || 0) * absQuantity;
                         if (totalQuantity > 0) {
+                            console.log(`Adding item: ${item.part_number}, Qty: ${totalQuantity}, Cost: ${item.cost || 0}`);
+                            
                             var existingMaterial = otherMaterials.find(m => m.part_number === item.part_number);
                             if (existingMaterial) {
                                 existingMaterial.quantity += totalQuantity;
                             } else {
                                 otherMaterials.push({
                                     part_number: item.part_number,
-                                    description: item.description,
+                                    description: item.description || 'No description',
                                     quantity: totalQuantity,
                                     cost: item.cost || 0
                                 });
@@ -2671,9 +2699,56 @@
                 }
             });
 
+            // Log the final calculation result
+            const totalCost = otherMaterials.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
+            console.log(`Calculated ${otherMaterials.length} other materials items with total cost: $${totalCost.toFixed(2)}`);
+            
             return otherMaterials;
+        }             
+
+        function ensureFactorCodesLoaded(category) {
+            const isSubBid = category.startsWith('subbid-');
+            const subBidId = isSubBid ? category.replace('subbid-', '') : null;
+            const wrapperSelector = isSubBid ? 
+                `#subBid_${subBidId}` : 
+                `#${category.toLowerCase()}Wrapper`;
+            
+            const wrapper = $(wrapperSelector);
+            if (wrapper.length === 0) {
+                console.error(`Wrapper not found: ${wrapperSelector}`);
+                return Promise.reject(`Wrapper not found: ${wrapperSelector}`);
+            }
+            
+            // Collect all factor codes in the wrapper
+            const factorCodes = new Set();
+            wrapper.find('.factorCodeInput').each(function() {
+                const factorCode = $(this).val();
+                if (factorCode) {
+                    factorCodes.add(factorCode);
+                }
+            });
+            
+            console.log(`Found ${factorCodes.size} unique factor codes in ${category}`);
+            
+            // Fetch all factor codes that aren't in the cache
+            const fetchPromises = [];
+            factorCodes.forEach(factorCode => {
+                if (!window.factorCodeItemsCache || !window.factorCodeItemsCache[factorCode]) {
+                    console.log(`Prefetching factor code: ${factorCode}`);
+                    fetchPromises.push(fetchFactorCodeItems(factorCode));
+                }
+            });
+            
+            return Promise.all(fetchPromises)
+                .then(() => {
+                    console.log(`Successfully loaded all factor codes for ${category}`);
+                    return true;
+                })
+                .catch(error => {
+                    console.error(`Error loading factor codes for ${category}:`, error);
+                    return false;
+                });
         }
-                
 
         function saveProject(projectData) {
             return new Promise((resolve, reject) => {
@@ -3006,7 +3081,6 @@
             updateTotalCost(wrapper);
         }
 
-
         function updateHeadingInfo(headingInfo) {
             $('#bidDate').val(headingInfo.bid_date || '');
             $('#projectName').val(headingInfo.project_name || '');
@@ -3014,6 +3088,10 @@
             $('#projectState').val(headingInfo.project_state || '');
             $('#projectCity').val(headingInfo.project_city || '');
             $('#projectZip').val(headingInfo.project_zip || '');
+            $('#architectName').val(headingInfo.architect_name || '');
+            $('#engineerName').val(headingInfo.engineer_name || '');
+            $('#pointOfContact').val(headingInfo.point_of_contact || '');
+            $('#bidComments').val(headingInfo.comments || ''); // Add this line
             
             // Explicitly handle bid amount
             if (headingInfo.bid_amount) {
@@ -3023,6 +3101,7 @@
             loadCustomerData(headingInfo.customer_name);
             loadProjectData(headingInfo.project_name);
         }
+
 
         function loadCustomerData(customerName) {
             if (customerCache.has(customerName)) {
@@ -3163,7 +3242,7 @@
         async function generateReport(category, doc, title, subBidId = null) {
             const bidId = $('#bidId').val();
             const bidDate = $('#bidDate').val();
-                                                                                                                                
+                                                                                                                                        
             let pageNumber = 1;
             let totalPages = 1;
 
@@ -3200,49 +3279,52 @@
             const pointOfContact = $('#pointOfContact').val();
 
             function addFullHeader() {
+                // MODIFIED: Increase starting Y position for title from 15 to 25
+                // This moves the title down by 10 units to prevent it being cut off when printing
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(16);
-                doc.text(title, 105, 15, { align: 'center' });
+                doc.text(title, 105, 25, { align: 'center' });
 
-                // Should be changed to:
+                // Adjust all subsequent Y positions by adding 10 to maintain proper spacing
                 doc.setFontSize(10);
                 doc.setFont("helvetica", "bold");
-                doc.text(`BID #: ${bidId}`, 15, 25);
+                doc.text(`BID #: ${bidId}`, 15, 35);  // Was 25
                 doc.setFont("helvetica", "normal");
-                doc.text(`Bid Created: ${formattedBidDate}`, 195, 25, { align: 'right' });
-                doc.text(`Date Printed: ${formattedPrintDate}`, 195, 30, { align: 'right' });
+                doc.text(`Bid Created: ${formattedBidDate}`, 195, 35, { align: 'right' });  // Was 25
+                doc.text(`Date Printed: ${formattedPrintDate}`, 195, 40, { align: 'right' });  // Was 30
 
                 doc.setFontSize(10);
                 doc.setFont("helvetica", "bold");
-                doc.text("CUSTOMER", 15, 40);
-                doc.text("PROJECT", 110, 40);
+                doc.text("CUSTOMER", 15, 50);  // Was 40
+                doc.text("PROJECT", 110, 50);  // Was 40
 
                 doc.setFont("helvetica", "normal");
                 doc.setFontSize(9);
-                doc.text(customerName, 15, 45);
-                doc.text(customerAddress, 15, 50);
-                doc.text(`${customerCity}, ${customerState} ${customerZip}`, 15, 55);
+                doc.text(customerName, 15, 55);  // Was 45
+                doc.text(customerAddress, 15, 60);  // Was 50
+                doc.text(`${customerCity}, ${customerState} ${customerZip}`, 15, 65);  // Was 55
 
-                doc.text(projectName, 110, 45);
-                doc.text(projectAddress, 110, 50);
-                doc.text(`${projectCity}, ${projectState} ${projectZip}`, 110, 55);
+                doc.text(projectName, 110, 55);  // Was 45
+                doc.text(projectAddress, 110, 60);  // Was 50
+                doc.text(`${projectCity}, ${projectState} ${projectZip}`, 110, 65);  // Was 55
 
                 doc.setLineWidth(0.5);
-                doc.line(15, 60, 195, 60);
+                doc.line(15, 70, 195, 70);  // Was 60
 
                 doc.setFont("helvetica", "bold");
-                doc.text("RATES & CONTACTS", 15, 65);
+                doc.text("RATES & CONTACTS", 15, 75);  // Was 65
                 doc.setFont("helvetica", "normal");
-                doc.text(`Tax Rate: ${(taxRate * 100).toFixed(2)}%`, 15, 70);
-                doc.text(`Labor Rate: $${laborRate.toFixed(2)}/hr`, 15, 75);
-                doc.text(`Architect: ${architectName || 'N/A'}`, 80, 70);
-                doc.text(`Engineer: ${engineerName || 'N/A'}`, 80, 75);
-                doc.text(`Point of Contact: ${pointOfContact || 'N/A'}`, 145, 70);
+                doc.text(`Tax Rate: ${(taxRate * 100).toFixed(2)}%`, 15, 80);  // Was 70
+                doc.text(`Labor Rate: $${laborRate.toFixed(2)}/hr`, 15, 85);  // Was 75
+                doc.text(`Architect: ${architectName || 'N/A'}`, 80, 80);  // Was 70
+                doc.text(`Engineer: ${engineerName || 'N/A'}`, 80, 85);  // Was 75
+                doc.text(`Point of Contact: ${pointOfContact || 'N/A'}`, 145, 80);  // Was 70
 
-                doc.line(15, 80, 195, 80);
+                doc.line(15, 90, 195, 90);  // Was 80
 
-                return 85;
+                return 95;  // Return new starting Y position (was 85)
             }
+
 
             function addTableHeader(startY, colWidths) {
                 let headers;
@@ -3810,91 +3892,104 @@ const totalsStartX = colXOffsets[0];
                 $(this).find('.lineNumber').text(index + 1);
             });
         }
-    
 
         function showOtherMaterials(category, shouldDisplay = true) {
             console.log(`Showing other materials for category: ${category}`);
-            var otherMaterials = calculateOtherMaterials(category);
-            var isSubBid = category.startsWith('subbid-');
-            var subBidId = isSubBid ? category.replace('subbid-', '') : null;
-            var title = isSubBid ? getSubBidName(subBidId) : category.charAt(0).toUpperCase() + category.slice(1);
-            var wrapperSelector = isSubBid ? `#subBid_${subBidId}` : `#${category.toLowerCase()}Wrapper`;
-            var wrapper = $(wrapperSelector);
+            
+            // First ensure all factor codes are loaded
+            ensureFactorCodesLoaded(category)
+                .then(() => {
+                    // Now calculate the other materials with a fully populated cache
+                    var otherMaterials = calculateOtherMaterials(category);
+                    var isSubBid = category.startsWith('subbid-');
+                    var subBidId = isSubBid ? category.replace('subbid-', '') : null;
+                    
+                    // Simplified title logic - always use "Sub Bid Other Materials" for sub-bids
+                    var title = isSubBid ? 
+                        "Sub Bid Other Materials" : 
+                        category.charAt(0).toUpperCase() + category.slice(1);
+                    
+                    var wrapperSelector = isSubBid ? `#subBid_${subBidId}` : `#${category.toLowerCase()}Wrapper`;
+                    var wrapper = $(wrapperSelector);
 
-            if (wrapper.length === 0) {
-                console.error(`Wrapper not found: ${wrapperSelector}`);
-                return;
-            }
+                    if (wrapper.length === 0) {
+                        console.error(`Wrapper not found: ${wrapperSelector}`);
+                        return;
+                    }
 
-            var totalCost = 0;
+                    var totalCost = 0;
 
-            var popoutHTML = `
-                <div id="otherMaterialsPopout" class="popout">
-                    <h3>${title} Other Materials</h3>
-                    <table>
-                        <thead>
+                    var popoutHTML = `
+                        <div id="otherMaterialsPopout" class="popout">
+                            <h3>${title}</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Part Number</th>
+                                        <th>Description</th>
+                                        <th>Quantity</th>
+                                        <th>Unit Cost</th>
+                                        <th>Total Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="otherMaterialsBody">
+                    `;
+
+                    otherMaterials.forEach(function(item) {
+                        var itemTotalCost = item.quantity * item.cost;
+                        totalCost += itemTotalCost;
+                        popoutHTML += `
                             <tr>
-                                <th>Part Number</th>
-                                <th>Description</th>
-                                <th>Quantity</th>
-                                <th>Unit Cost</th>
-                                <th>Total Cost</th>
+                                <td>${item.part_number}</td>
+                                <td>${item.description}</td>
+                                <td>${item.quantity.toFixed(2)}</td>
+                                <td>$${item.cost.toFixed(2)}</td>
+                                <td>$${itemTotalCost.toFixed(2)}</td>
                             </tr>
-                        </thead>
-                        <tbody id="otherMaterialsBody">
-            `;
+                        `;
+                    });
 
-            otherMaterials.forEach(function(item) {
-                var itemTotalCost = item.quantity * item.cost;
-                totalCost += itemTotalCost;
-                popoutHTML += `
-                    <tr>
-                        <td>${item.part_number}</td>
-                        <td>${item.description}</td>
-                        <td>${item.quantity.toFixed(2)}</td>
-                        <td>$${item.cost.toFixed(2)}</td>
-                        <td>$${itemTotalCost.toFixed(2)}</td>
-                    </tr>
-                `;
-            });
+                    popoutHTML += `
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="4">Total Other Material Cost:</td>
+                                        <td>$${totalCost.toFixed(2)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            <button onclick="closeOtherMaterials()">Close</button>
+                        </div>`;
 
-            popoutHTML += `
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="4">Total Other Material Cost:</td>
-                                <td>$${totalCost.toFixed(2)}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                    <button onclick="closeOtherMaterials()">Close</button>
-                </div>`;
+                    $('#otherMaterialsPopout').remove();
+                    $('body').append(popoutHTML);
 
-            $('#otherMaterialsPopout').remove();
-            $('body').append(popoutHTML);
+                    if (shouldDisplay) {
+                        $('#otherMaterialsPopout').show();
+                    } else {
+                        $('#otherMaterialsPopout').hide();
+                    }
 
-            if (shouldDisplay) {
-                $('#otherMaterialsPopout').show();
-            } else {
-                $('#otherMaterialsPopout').hide();
-            }
+                    // Update the Other Materials cost for each row
+                    wrapper.find('.itemsTable tbody tr').each(function() {
+                        var tr = $(this);
+                        var factorCode = tr.find('.factorCodeInput').val();
+                        var quantity = parseFloat(tr.find('.quantity input').val()) || 0;
+                        var otherMaterialsCost = calculateOtherMaterialsCost(factorCode, quantity);
+                        tr.find('.otherMaterials').text(`$${otherMaterialsCost.toFixed(2)}`);
+                    });
 
-            // Update the Other Materials cost for each row
-            wrapper.find('.itemsTable tbody tr').each(function() {
-                var tr = $(this);
-                var factorCode = tr.find('.factorCodeInput').val();
-                var quantity = parseFloat(tr.find('.quantity input').val()) || 0;
-                var otherMaterialsCost = calculateOtherMaterialsCost(factorCode, quantity);
-                tr.find('.otherMaterials').text(`$${otherMaterialsCost.toFixed(2)}`);
-            });
+                    // Update the total Other Materials cost
+                    wrapper.find('.totalOtherMaterialsCost').text(`$${totalCost.toFixed(2)}`);
 
-            // Update the total Other Materials cost
-            wrapper.find('.totalOtherMaterialsCost').text(`$${totalCost.toFixed(2)}`);
+                    updateTotalLineExtCost(wrapper);
+                    updateTotalCost(wrapper);
 
-            updateTotalLineExtCost(wrapper);
-            updateTotalCost(wrapper);
-
-            console.log(`Finished showing other materials for ${category}. Total cost: $${totalCost.toFixed(2)}`);
+                    console.log(`Finished showing other materials for ${category}. Total cost: $${totalCost.toFixed(2)}`);
+                })
+                .catch(error => {
+                    console.error(`Error showing other materials for ${category}:`, error);
+                });
         }
 
         // Function to calculate other materials cost for a specific row in a sub-bid
@@ -5514,35 +5609,35 @@ function handleRowClick(event) {
             }
         });
     }
-
+    
     async function generateSubBidReport(subBidId, category) {
-    try {
-        // Fetch the sub-bid details to get the name
-        const response = await fetch(`/api/subbids/${subBidId}`);
-        if (!response.ok) {
-            throw new Error('Failed to fetch sub-bid details');
+        try {
+            // Fetch the sub-bid details to get the name
+            const response = await fetch(`/api/subbids/${subBidId}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch sub-bid details');
+            }
+            const subBid = await response.json();
+
+            // Create a new PDF document
+            const { jsPDF } = window.jspdf;
+            let doc = new jsPDF();
+
+            // Generate the title for the sub-bid report
+            // We're keeping the title text the same, the position adjustment is handled in generateReport
+            const title = `${category.charAt(0).toUpperCase() + category.slice(1)} - Sub-Bid: ${subBid.name}`;
+
+            // Use the existing generateReport function with the sub-bid ID
+            await generateReport(category, doc, title, subBidId);
+
+            // Save the PDF with the sub-bid name
+            doc.save(`SubBid_${subBid.name}_Report.pdf`);
+
+        } catch (error) {
+            console.error('Error generating sub-bid report:', error);
+            alert('Error generating report. Please try again.');
         }
-        const subBid = await response.json();
-
-        // Create a new PDF document
-        const { jsPDF } = window.jspdf;
-        let doc = new jsPDF();
-
-        // Generate the title for the sub-bid report
-        const title = `${category.charAt(0).toUpperCase() + category.slice(1)} - Sub-Bid: ${subBid.name}`;
-
-        // Use the existing generateReport function with the sub-bid ID
-        await generateReport(category, doc, title, subBidId);
-
-        // Save the PDF with the sub-bid name
-        doc.save(`SubBid_${subBid.name}_Report.pdf`);
-
-    } catch (error) {
-        console.error('Error generating sub-bid report:', error);
-        alert('Error generating report. Please try again.');
     }
-}
-
 
     function addRowToWrapper(wrapper, item) {
         // Create a new row
@@ -6133,7 +6228,7 @@ function editSubBid(subBidId, category) {
                 throw new Error(`Sub-bid content element not found for category: ${category}`);
             }
 
-            // Define tableHTML with the complete structure
+            // Build the table HTML as before
             let tableHTML = `
                 <div id="subBid_${subBidId}" data-category="${category}" class="content-wrapper sub-bid-wrapper">
                     <h3>${subBid.name}</h3>
@@ -6159,9 +6254,10 @@ function editSubBid(subBidId, category) {
                         </thead>
                         <tbody>`;
 
-            // Add items with their additional descriptions
+            // Add the items rows as before
             if (subBid.items && Array.isArray(subBid.items)) {
                 subBid.items.forEach((item, index) => {
+                    // Item row HTML code as before
                     const quantity = parseFloat(item.quantity) || 0;
                     const cost = parseFloat(item.cost) || 0;
                     const laborHours = parseFloat(item.labor_hours) || 0;
@@ -6221,41 +6317,60 @@ function editSubBid(subBidId, category) {
 
             subBidContentElement.innerHTML = tableHTML;
 
-            // Wait for DOM to update
-            setTimeout(() => {
-                try {
-                    const subBidWrapper = $(`#subBid_${subBidId}`);
-                    if (!subBidWrapper.length) {
-                        throw new Error('Sub-bid wrapper not found after DOM update');
+            // Extract all unique factor codes from the items - NEW CODE
+            const factorCodes = new Set();
+            if (subBid.items && Array.isArray(subBid.items)) {
+                subBid.items.forEach(item => {
+                    if (item.factor_code) {
+                        factorCodes.add(item.factor_code);
                     }
+                });
+            }
 
-                    // First attach event handlers
-                    attachEventHandlers(subBidWrapper);
+            // Fetch factor code items for all unique factor codes - NEW CODE
+            const fetchPromises = Array.from(factorCodes).map(factorCode => {
+                return fetchFactorCodeItems(factorCode);
+            });
 
-                    // Initialize rows with their descriptions from data attributes
-                    subBidWrapper.find('.itemsTable tbody tr.item-row').each(function() {
-                        const $row = $(this);
-                        const desc = $row.attr('data-additional-description');
-                        if (desc) {
-                            $row.data('additionalDescription', decodeURIComponent(desc));
-                            console.log('Initialized row with description:', decodeURIComponent(desc));
+            // Wait for all factor code items to be fetched before initializing - NEW CODE
+            return Promise.all(fetchPromises)
+                .then(() => {
+                    try {
+                        const subBidWrapper = $(`#subBid_${subBidId}`);
+                        if (!subBidWrapper.length) {
+                            throw new Error('Sub-bid wrapper not found after DOM update');
                         }
-                    });
 
-                    // Then initialize other features
-                    initializeExistingRows(subBidWrapper);
-                    
-                    // Finally enable drag and drop
-                    enableDragAndDrop(`#subBid_${subBidId} .itemsTable`);
-                    
-                    // Update totals after everything is initialized
-                    updateTotalCost(subBidWrapper);
+                        // Attach event handlers
+                        attachEventHandlers(subBidWrapper);
 
-                    console.log('Sub-bid initialized with descriptions');
-                } catch (error) {
-                    console.error('Error initializing sub-bid:', error);
-                }
-            }, 0);
+                        // Initialize rows with their descriptions
+                        subBidWrapper.find('.itemsTable tbody tr.item-row').each(function() {
+                            const $row = $(this);
+                            const desc = $row.attr('data-additional-description');
+                            if (desc) {
+                                $row.data('additionalDescription', decodeURIComponent(desc));
+                                console.log('Initialized row with description:', decodeURIComponent(desc));
+                            }
+                        });
+
+                        // Initialize other features
+                        initializeExistingRows(subBidWrapper);
+                        
+                        // Enable drag and drop
+                        enableDragAndDrop(`#subBid_${subBidId} .itemsTable`);
+                        
+                        // Update totals after everything is initialized
+                        updateTotalCost(subBidWrapper);
+                        
+                        // Update other materials with the initialized cache - NEW CODE
+                        showOtherMaterials(`subbid-${subBidId}`, false);
+
+                        console.log('Sub-bid initialized with descriptions and factor code cache');
+                    } catch (error) {
+                        console.error('Error initializing sub-bid:', error);
+                    }
+                });
         })
         .catch(error => {
             console.error('Error fetching sub-bid data:', error);
@@ -6265,7 +6380,7 @@ function editSubBid(subBidId, category) {
             $('#loadingOverlay').hide();
         });
 }
-    // Helper function to get CSRF token
+    
     function getCsrfToken() {
         const tokenElement = document.getElementById('csrf_token');
         if (!tokenElement) {

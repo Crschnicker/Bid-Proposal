@@ -1,0 +1,191 @@
+{% extends "layout.html" %}
+
+{% block title %}Weekly Bid Schedule{% endblock %}
+
+{% block additional_styles %}
+<style>
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+        #print-section, #print-section * {
+            visibility: visible;
+        }
+        #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+        }
+        .no-print {
+            display: none !important;
+        }
+    }
+
+    .content-container {
+        max-width: 1200px;
+        margin: 32px auto;
+        padding: 16px;
+    }
+
+    .schedule-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .print-btn {
+        background: linear-gradient(135deg, #3498db, #2ecc71);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 10px 15px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: transform 0.3s;
+    }
+
+    .print-btn:hover {
+        transform: translateY(-2px);
+    }
+
+    .schedule-title {
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 24px;
+        font-weight: bold;
+    }
+
+    .schedule-date {
+        text-align: right;
+        margin-bottom: 10px;
+        font-style: italic;
+    }
+
+    .schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 30px;
+    }
+
+    .schedule-table th {
+        background-color: #3498db;
+        color: white;
+        font-weight: 500;
+        text-align: left;
+        padding: 10px;
+        border: 1px solid #ddd;
+    }
+
+    .schedule-table td {
+        padding: 10px;
+        border: 1px solid #ddd;
+        vertical-align: top;
+    }
+
+    .urgency-header {
+        font-size: 18px;
+        font-weight: bold;
+        margin: 20px 0 10px 0;
+        padding-bottom: 5px;
+        border-bottom: 2px solid #3498db;
+    }
+
+    .urgency-A {
+        color: #e74c3c; /* Red for high priority */
+    }
+
+    .urgency-B {
+        color: #f39c12; /* Orange for medium priority */
+    }
+
+    .urgency-C {
+        color: #2ecc71; /* Green for low priority */
+    }
+
+    .urgency-R {
+        color: #9b59b6; /* Purple for review */
+    }
+
+    .urgency-separator td {
+        padding: 0;
+        height: 2px;
+        background-color: #e74c3c;
+        border: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content-container">
+    <div class="schedule-header no-print">
+        <a href="{{ url_for('bid_management') }}" class="print-btn">
+            <i class="fas fa-arrow-left"></i> Back to Bid Management
+        </a>
+        <button onclick="window.print()" class="print-btn">
+            <i class="fas fa-print"></i> Print Schedule
+        </button>
+    </div>
+
+    <div id="print-section">
+        <div class="schedule-title">Weekly Bid Schedule</div>
+        <div class="schedule-date">Modified: {{ current_date.strftime('%B %d, %Y') }}</div>
+
+        <table class="schedule-table">
+            <thead>
+                <tr>
+                    <th class="urgency-col">Urgency</th>
+                    <th class="bid-col">Bid #</th>
+                    <th class="job-col">Job Description</th>
+                    <th class="builder-col">Builder</th>
+                    <th class="date-col">Date Needed</th>
+                    <th class="date-col">Start Date</th>
+                    <th class="takeoff-col">% Take Off</th>
+                    <th class="comments-col">Comments</th>
+                </tr>
+            </thead>
+            <tbody>
+                {# Flag to track if we've already added a separator #}
+                {% set ns = namespace(first_group_added=false) %}
+
+                {# Iterate through predefined urgency order #}
+                {% for urgency in ['A', 'B', 'C', 'R', 'None'] %}
+                    {% if grouped_bids[urgency] %}
+                        {# Add separator between groups, but not before the first group #}
+                        {% if ns.first_group_added %}
+                            <tr class="urgency-separator">
+                                <td colspan="8"></td>
+                            </tr>
+                        {% endif %}
+
+                        {# Header for the urgency group #}
+                        <tr>
+                            <td colspan="8" class="urgency-header urgency-{{ urgency }}">
+                                {{ urgency_labels[urgency] }}
+                            </td>
+                        </tr>
+
+                        {# Rows for this urgency group #}
+                        {% for bid in grouped_bids[urgency] %}
+                            <tr>
+                                <td>{{ bid.urgency or '-' }}</td>
+                                <td>{{ bid.bid_id }}</td>
+                                <td>{{ bid.project_name }}</td>
+                                <td>{{ bid.customer_name }}</td>
+                                <td>{{ bid.bid_date.strftime('%m/%d/%Y') if bid.bid_date else 'N/A' }}</td>
+                                <td>{{ bid.date_created.strftime('%m/%d/%Y') if bid.date_created else 'N/A' }}</td>
+                                <td></td>
+                                <td>{{ bid.comments }}</td>
+                            </tr>
+                        {% endfor %}
+
+                        {# Set flag to true after first group is added #}
+                        {% set ns.first_group_added = true %}
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

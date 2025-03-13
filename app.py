@@ -44,6 +44,8 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from io import BytesIO
 from datetime import datetime
+from reportlab.lib.units import inch  # Make sure to import inch
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -435,6 +437,7 @@ class Customer(db.Model):
 
     bids = db.relationship('Bid', back_populates='customer')
 
+
 class Bid(db.Model):
     bid_id = db.Column(db.String, primary_key=True)
     bid_date = db.Column(db.Date)
@@ -460,7 +463,8 @@ class Bid(db.Model):
     irrigation_total = db.Column(db.Float, default=0.0)
     maintenance_total = db.Column(db.Float, default=0.0)
     total_budget = db.Column(db.Float, default=0.0)
-    bid_amount = db.Column(db.Float, default=0.0)  # New field for bid amount
+    bid_amount = db.Column(db.Float, default=0.0)
+    comments = db.Column(db.Text)  # New field for bid comments
 
     customer = db.relationship('Customer', back_populates='bids')
     project = db.relationship('Project', back_populates='bids')
@@ -468,9 +472,7 @@ class Bid(db.Model):
     sub_bids = db.relationship('SubBid', back_populates='bid', cascade="all, delete-orphan")
     factor_code_items = db.relationship('BidFactorCodeItems', back_populates='bid', 
                                         cascade="all, delete-orphan")
-    # Add the new urgency field
-    urgency = db.Column(db.String(10), nullable=True)  # A-High, B-Med, C-Low, R-Review
-
+    urgency = db.Column(db.String(10), nullable=True)
 class BidFactorCodeItems(db.Model):
     __tablename__ = 'bid_factor_code_items'
     id = db.Column(db.Integer, primary_key=True)
@@ -489,31 +491,38 @@ class BidFactorCodeItems(db.Model):
     bid = db.relationship('Bid', back_populates='factor_code_items')
 
 class SubBid(db.Model):
+    __tablename__ = 'sub_bid'
     sub_bid_id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255))
     cost = db.Column(db.Float)
     labor_hours = db.Column(db.Float)
-    bid_id = db.Column(db.String, db.ForeignKey('bid.bid_id'), nullable=False)
+    bid_id = db.Column(db.String, db.ForeignKey('bid.bid_id', ondelete='CASCADE'), nullable=False)
     category = db.Column(db.String(50), nullable=False, default='unknown')
     total_cost = db.Column(db.Float, default=0.0)
 
     bid = db.relationship('Bid', back_populates='sub_bids')
-    items = db.relationship('SubBidItem', back_populates='sub_bid', cascade='all, delete-orphan')
+    items = db.relationship('SubBidItem', 
+                            back_populates='sub_bid', 
+                            cascade='all, delete-orphan', 
+                            passive_deletes=True)
 
-# 1. Update the SubBidItem model to include additional_description
 class SubBidItem(db.Model):
     __tablename__ = 'sub_bid_items'
     id = db.Column(db.Integer, primary_key=True)
-    sub_bid_id = db.Column(db.Integer, db.ForeignKey('sub_bid.sub_bid_id'), nullable=False)
+    sub_bid_id = db.Column(db.Integer, db.ForeignKey('sub_bid.sub_bid_id', ondelete='CASCADE'), nullable=False)
     part_number = db.Column(db.String(50))
     description = db.Column(db.String(255))
-    additional_description = db.Column(db.String(255))  # Add this line
+    additional_description = db.Column(db.String(255), nullable=True)
     factor_code = db.Column(db.String(50))
     quantity = db.Column(db.Float)
     cost = db.Column(db.Float)
     labor_hours = db.Column(db.Float)
     line_ext_cost = db.Column(db.Float)
-    sub_bid = db.relationship('SubBid', back_populates='items')
+    
+    sub_bid = db.relationship('SubBid', 
+                               back_populates='items', 
+                               passive_deletes=True)
+    
 
 class BidAdjustment(db.Model):
     __tablename__ = 'bid_adjustments'
@@ -2857,12 +2866,15 @@ def get_next_bid_id():
         if latest_bid:
             # If there are existing bids, increment the last one
             last_id = latest_bid.bid_id
-            # Assuming the bid_id is in the format 'BXXXXX'
+            # Use a more robust parsing method
             try:
-                num = int(last_id[1:]) + 1  # Remove the 'B' and convert to int
-            except ValueError:
+                # Extract only the numeric part, assuming the format starts with 'B' followed by digits
+                numeric_part = ''.join(filter(str.isdigit, last_id))
+                num = int(numeric_part) + 1 if numeric_part else 1
+            except (ValueError, TypeError):
                 app.logger.error(f"Error parsing last bid ID '{last_id}'")
                 num = 1  # Fallback to starting from 1 if parsing fails
+            
             next_id = f"B{num:05d}"
         else:
             # If no bids exist, start with B00001
@@ -2873,7 +2885,6 @@ def get_next_bid_id():
     except Exception as e:
         app.logger.error(f"Error generating next bid ID: {str(e)}", exc_info=True)
         return jsonify({'error': 'An error occurred while generating the next bid ID', 'details': str(e)}), 500
-
 @app.route('/get-bid-labor-rates', methods=['GET'])
 @staff_required
 def get_bid_labor_rates():
@@ -3414,14 +3425,147 @@ def get_bid_items(bid_id):
                 'engineer_name': bid.engineer_name,
                 'architect_name': bid.architect_name,
                 'point_of_contact': bid.point_of_contact,
-                'bid_amount': bid.bid_amount or 0.0
+                'bid_amount': bid.bid_amount or 0.0,
+                'comments': bid.comments  # Add this line to include the comments field
             }
         }
         return jsonify(response_data), 200
     except Exception as e:
         app.logger.error(f"Error fetching bid items: {str(e)}")
         return jsonify({"error": "An error occurred while fetching bid items"}), 500
+
+
+
+def generate_weekly_bid_schedule_pdf():
+    # Create a buffer for the PDF
+    buffer = BytesIO()
     
+    # Create the PDF document in landscape orientation
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                            rightMargin=36, leftMargin=36, 
+                            topMargin=36, bottomMargin=18)
+    
+    # Container for the 'Flowable' objects
+    elements = []
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = styles['Title']
+    heading_style = styles['Normal']
+    heading_style.fontSize = 10
+    
+    # Create a small paragraph style for project and customer
+    small_text_style = ParagraphStyle(
+        'SmallText',
+        parent=styles['Normal'],
+        fontSize=6,
+        leading=8
+    )
+    
+    # Title
+    elements.append(Paragraph("Weekly Bid Schedule", title_style))
+    elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y')}", heading_style))
+    elements.append(Spacer(1, 12))
+    
+    # Fetch and sort all bids
+    try:
+        bids = Bid.query.all()
+    except Exception as e:
+        current_app.logger.error(f"Error fetching bids: {str(e)}")
+        return None
+    
+    # Define urgency order for sorting
+    # Ensure A is first, then B, then C, then R
+    urgency_order = {'A': 0, 'B': 1, 'C': 2, 'R': 3, None: 4}
+    
+    sorted_bids = sorted(
+        bids,
+        key=lambda bid: (
+            urgency_order.get(bid.urgency, 4),  # Urgency sorted ascending
+            -bid.bid_date.toordinal() if bid.bid_date else float('inf')  # Date Needed sorted descending
+        )
+    )
+    
+    # Prepare table data with all bids
+    table_data = [
+        ['Urgency', 'Bid #', 'Job Description', 'Builder', 'Date Needed', 'Date Start', 'Estimator', 'Comments']
+    ]
+    
+    # Add bid rows
+    for bid in reversed(sorted_bids):
+        # Create paragraphs with small font for project and customer
+        project_para = Paragraph(str(bid.project_name), small_text_style)
+        customer_para = Paragraph(str(bid.customer_name), small_text_style)
+        
+        # Modify urgency display
+        display_urgency = 'A-High' if bid.urgency == 'A' else (
+            'B-Med' if bid.urgency == 'B' else (
+            'C-Low' if bid.urgency == 'C' else (
+            'R-Review' if bid.urgency == 'R' else str(bid.urgency or '-'))))
+        
+        table_data.append([
+            display_urgency,
+            str(bid.bid_id),
+            project_para,
+            customer_para,
+            bid.bid_date.strftime('%m/%d/%Y') if bid.bid_date else 'N/A',
+            bid.date_created.strftime('%m/%d/%Y') if bid.date_created else 'N/A',
+            '', # % Take Off - left blank as requested
+            str(bid.comments or '')
+        ])
+    
+    # Create table with column widths adjusted for landscape
+    table = Table(table_data, 
+                  repeatRows=1, 
+                  colWidths=[0.75*inch, 1*inch, 1.5*inch, 1.5*inch, 1*inch, 1*inch, 1*inch, 2*inch])
+    
+    # Style the table
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.white),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 8),  # Header font
+        ('FONTSIZE', (0,1), (-1,-1), 7),  # Data font
+        ('BOTTOMPADDING', (0,0), (-1,0), 3),
+        ('BACKGROUND', (0,1), (-1,-1), colors.white),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('WORDWRAP', (0,0), (-1,-1), 1)
+    ]))
+    
+    elements.append(table)
+    
+    # Build PDF
+    doc.build(elements)
+    
+    # Move buffer position to the beginning
+    buffer.seek(0)
+    
+    # Return the PDF as a file
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name='weekly_bid_schedule.pdf'
+    )
+
+# Add this route to your Flask application
+@app.route('/weekly-bid-schedule-pdf')
+@staff_required
+def weekly_bid_schedule_pdf():
+    from flask import current_app
+    try:
+        pdf_response = generate_weekly_bid_schedule_pdf()
+        if pdf_response is None:
+            flash('Failed to generate PDF. Please check the logs.', 'error')
+            return redirect(url_for('bid_management'))
+        return pdf_response
+    except Exception as e:
+        current_app.logger.error(f"Error generating weekly bid schedule PDF: {str(e)}")
+        flash('An error occurred while generating the PDF', 'error')
+        return redirect(url_for('bid_management'))
+
 @app.route('/get-proposal-items/<bid_id>')
 @staff_required
 def get_proposal_items(bid_id):
@@ -3547,7 +3691,7 @@ def get_next_job_number():
         for job in job_numbers:
             try:
                 num = int(job[0])
-                if num >= 6000:  # Only consider numbers >= 6000
+                if num >= 6050:  # Only consider numbers >= 6000
                     existing_numbers.append(num)
             except ValueError:
                 continue
@@ -5362,45 +5506,80 @@ def manage_factors():
 @staff_required
 def delete_bid(bid_id):
     try:
-        # Fetch related bid data
-        bid = Bid.query.filter_by(bid_id=bid_id).first_or_404()
-        proposal = Proposal.query.filter_by(bid_id=bid_id).first()
-        sub_bids = SubBid.query.filter_by(bid_id=bid_id).all()
+        # First, check for associated jobs
+        job = Job.query.filter_by(bid_id=bid_id).first()
+        
+        if job:
+            # If a job exists, we need to handle it
+            # Option 1: Prevent deletion
+            flash(f'Cannot delete bid {bid_id}. A job is associated with this bid.', 'error')
+            return redirect(url_for('bid_management'))
+            
+            # Option 2: If you want to delete the job as well, uncomment these lines:
+            # db.session.delete(job)
 
-        # Perform deletions
-        if proposal:
-            ProposalAmount.query.filter_by(proposal_id=proposal.id).delete()
-            ProposalOption.query.filter_by(proposal_id=proposal.id).delete()
-            for component in proposal.components:
-                ProposalComponentLine.query.filter_by(component_id=component.id).delete()
-            ProposalComponent.query.filter_by(proposal_id=proposal.id).delete()
-            db.session.delete(proposal)
+        # Fetch the bid
+        bid = Bid.query.filter_by(bid_id=bid_id).first()
+        
+        if not bid:
+            flash(f'Bid {bid_id} not found.', 'error')
+            return redirect(url_for('bid_management'))
 
-        for sub_bid in sub_bids:
-            SubBidItem.query.filter_by(sub_bid_id=sub_bid.sub_bid_id).delete()
-            db.session.delete(sub_bid)
+        # Delete related records
+        with db.session.no_autoflush:
+            # Delete SubBidItems first
+            SubBidItem.query.filter(
+                SubBidItem.sub_bid_id.in_(
+                    db.session.query(SubBid.sub_bid_id)
+                    .filter(SubBid.bid_id == bid_id)
+                )
+            ).delete(synchronize_session=False)
 
-        BidFactorCodeItems.query.filter_by(bid_id=bid_id).delete()
-        db.session.delete(bid)
+            # Delete SubBids
+            SubBid.query.filter_by(bid_id=bid_id).delete(synchronize_session=False)
+
+            # Delete BidFactorCodeItems
+            BidFactorCodeItems.query.filter_by(bid_id=bid_id).delete(synchronize_session=False)
+
+            # Delete associated proposal data
+            proposal = Proposal.query.filter_by(bid_id=bid_id).first()
+            if proposal:
+                ProposalComponentLine.query.filter(
+                    ProposalComponentLine.component_id.in_(
+                        ProposalComponent.query
+                        .with_entities(ProposalComponent.id)
+                        .filter_by(proposal_id=proposal.id)
+                    )
+                ).delete(synchronize_session=False)
+                
+                ProposalComponent.query.filter_by(proposal_id=proposal.id).delete(synchronize_session=False)
+                ProposalAmount.query.filter_by(proposal_id=proposal.id).delete(synchronize_session=False)
+                ProposalOption.query.filter_by(proposal_id=proposal.id).delete(synchronize_session=False)
+                
+                db.session.delete(proposal)
+
+            # Delete BidAdjustments
+            BidAdjustment.query.filter_by(bid_id=bid_id).delete(synchronize_session=False)
+
+            # Finally, delete the bid
+            db.session.delete(bid)
+
+        # Commit the transaction
         db.session.commit()
 
         # Log the deletion
-        log_audit(
-            'delete_bid',
-            f"Deleted bid {bid_id}"
-        )
+        log_audit('delete_bid', f"Deleted bid {bid_id}")
 
-        # Redirect to the bid management page after successful deletion
         flash('Bid deleted successfully.', 'success')
         return redirect(url_for('bid_management'))
 
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Error deleting bid {bid_id}: {str(e)}", exc_info=True)
         log_audit('delete_bid_error', f"Error deleting bid {bid_id}: {str(e)}")
         flash(f'Error deleting bid: {str(e)}', 'error')
         return redirect(url_for('bid_management'))
-
-
+    
 # 6. Enhanced inventory management route with audit logging
 @app.route('/inventory/manage', methods=['GET', 'POST'])
 @admin_required
@@ -6051,6 +6230,8 @@ def save_sub_bid():
             "success": False, 
             "error": error_msg
         }), 500
+    
+    
 @app.route('/save-bid', methods=['POST'])
 @staff_required
 def save_bid(bid_data=None):
@@ -6090,6 +6271,11 @@ def save_bid(bid_data=None):
             except (ValueError, TypeError):
                 app.logger.warning(f"Invalid bid_amount value: {heading_info['bid_amount']}")
                 # Keep existing value or default if conversion fails
+        
+        # Handle comments field
+        if 'comments' in heading_info:
+            bid.comments = heading_info['comments']
+            app.logger.info(f"Set comments to: {heading_info['comments']}")
         
         # Update labor rates
         labor_rates = bid_data.get('labor_rates', {})
@@ -6146,6 +6332,7 @@ def save_bid(bid_data=None):
                     )
                     db.session.add(new_item)
 
+        
         db.session.commit()
         app.logger.info(f"Bid saved successfully: ID {bid.bid_id}")
         return {"success": True, "bid_id": bid.bid_id}
@@ -6158,7 +6345,6 @@ def save_bid(bid_data=None):
         app.logger.error(f"Unexpected error saving bid: {str(e)}")
         app.logger.error(traceback.format_exc())
         return {"success": False, "error": "An unexpected error occurred while saving the bid", "details": str(e)}
-
 
 @app.route('/api/proposals', methods=['GET', 'POST'])
 @staff_required
