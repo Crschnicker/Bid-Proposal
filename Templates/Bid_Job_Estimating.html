@@ -3358,9 +3358,34 @@
 
             // Fetch items based on whether it's a main bid or sub-bid
             let items;
+            // In the generateReport function, around line 7720
             if (subBidId) {
                 items = await fetchSubBidItems(subBidId);
-                // Decode descriptions and add safeguards
+                
+                // Add this block to fetch other materials and associate them with items
+                const otherMaterials = await fetchSubBidOtherMaterials(subBidId);
+                
+                // Create a mapping from factor codes to their associated other materials costs
+                const factorCodeMaterialCosts = {};
+                items.forEach(item => {
+                    // Calculate other materials cost for this item's factor code
+                    if (item.factor_code) {
+                        // Find materials associated with this item's factor code and quantity
+                        let materialCost = 0;
+                        const quantity = parseFloat(item.quantity) || 0;
+                        
+                        // Use the cached factor code items if available
+                        if (window.factorCodeItemsCache && window.factorCodeItemsCache[item.factor_code]) {
+                            materialCost = window.factorCodeItemsCache[item.factor_code].reduce((total, material) => {
+                                return total + ((parseFloat(material.cost) || 0) * 
+                                            (parseFloat(material.quantity) || 0) * quantity);
+                            }, 0);
+                        }
+                        factorCodeMaterialCosts[item.factor_code] = materialCost;
+                    }
+                });
+                
+                // Map items with the calculated other materials costs
                 items = items.map(item => ({
                     part_number: item.part_number || '',
                     description: decodeURIComponent(item.description || ''),
@@ -3368,7 +3393,7 @@
                     quantity: parseFloat(item.quantity) || 0,
                     cost: parseFloat(item.cost) || 0,
                     factor_code: item.factor_code || '',
-                    other_materials_cost: parseFloat(item.other_materials_cost) || 0,
+                    other_materials_cost: factorCodeMaterialCosts[item.factor_code] || 0,
                     labor_hours: parseFloat(item.labor_hours) || 0,
                     tax: parseFloat(item.tax) || 0,
                     line_ext_cost: parseFloat(item.line_ext_cost) || 0

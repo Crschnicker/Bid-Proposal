@@ -1,50 +1,59 @@
 import base64
-from flask import Flask, request, jsonify, render_template, session, send_file, current_app, redirect, url_for, flash, abort
+import os
+import threading
+import traceback
+import json
+import secrets
+import random
+import string
+import re
+
+from math import ceil
+from functools import wraps
+from urllib.parse import unquote
+
+from flask import (
+    Flask, request, jsonify, render_template, session, 
+    send_file, current_app, redirect, url_for, flash, abort
+)
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_wtf import FlaskForm, CSRFProtect
+from flask_mail import Mail, Message
+from flask_caching import Cache
+
+from werkzeug.exceptions import BadRequest
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.serving import run_simple
+
+from sqlalchemy import (
+    or_, case, desc, select, union, func, 
+    literal, cast, String
+)
+from sqlalchemy.exc import SQLAlchemyError, DBAPIError
+
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import DataRequired, Email, Length, EqualTo
+
+from dotenv import load_dotenv
+
+from itsdangerous import URLSafeTimedSerializer
+
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
 from reportlab.lib import colors
-from dotenv import load_dotenv
-from fuzzywuzzy import process, fuzz
-from sqlalchemy import or_, case, desc, select, union, func, literal, cast, String
-import os
-import threading 
-from werkzeug.exceptions import BadRequest
-import traceback
-from flask_wtf.csrf import CSRFProtect
-from flask_caching import Cache
+from reportlab.lib.units import inch
+
 from apscheduler.schedulers.background import BackgroundScheduler
-from werkzeug.serving import run_simple
-from math import ceil
-from urllib.parse import unquote
-from sqlalchemy.exc import SQLAlchemyError, DBAPIError  # Add this import
-from wtforms import ValidationError
-from urllib.parse import unquote
-import json  # Add this import
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import DataRequired, Email, Length, EqualTo
-from itsdangerous import URLSafeTimedSerializer
-import secrets
-import random
-import string
-# Add these imports at the top of your main.py
-from flask_mail import Mail, Message
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
-from datetime import datetime
-from reportlab.lib.units import inch  # Make sure to import inch
+
+from fuzzywuzzy import process, fuzz
 
 # Load environment variables from .env file
 load_dotenv()
@@ -376,8 +385,12 @@ class Project(db.Model):
     project_state = db.Column(db.String(255))
     project_city = db.Column(db.String(255))
     project_zip = db.Column(db.String(255))
-    point_of_contact = db.Column(db.String(255), nullable=True)  # New field
-    contact_phone_number = db.Column(db.String(50), nullable=True)  # New field
+    point_of_contact = db.Column(db.String(255), nullable=True)
+    contact_phone_number = db.Column(db.String(50), nullable=True)
+    status = db.Column(db.String(20), default='Active')  # New field
+    date_received = db.Column(db.Date, nullable=True)  # New field
+    date_needed = db.Column(db.Date, nullable=True)  # New field
+    start_date = db.Column(db.Date, nullable=True)  # New field
 
     bids = db.relationship('Bid', back_populates='project')
 
@@ -1279,7 +1292,7 @@ def add_update_project():
         data = request.form
         project_name = data.get('project_name')
         
-        project = Project.query.get(project_name)
+        project = db.session.get(Project, project_name)
         action = 'update_project' if project else 'create_project'
         
         if project:
@@ -1290,7 +1303,10 @@ def add_update_project():
                 'city': project.project_city,
                 'zip': project.project_zip,
                 'point_of_contact': project.point_of_contact,
-                'contact_phone_number': project.contact_phone_number
+                'contact_phone_number': project.contact_phone_number,
+                'status': project.status,
+                'date_received': project.date_received,
+                'date_needed': project.date_needed
             }
             
             # Update project
@@ -1300,11 +1316,39 @@ def add_update_project():
             project.project_zip = data.get('project_zip')
             project.point_of_contact = data.get('point_of_contact')
             project.contact_phone_number = data.get('contact_phone_number')
+            project.status = data.get('status', 'Active')
+            project.start_date = request.form.get('start_date', None)
+
+            # Parse dates
+            date_received = data.get('date_received')
+            date_needed = data.get('date_needed')
+            
+            if date_received:
+                try:
+                    project.date_received = datetime.strptime(date_received, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        project.date_received = datetime.strptime(date_received, '%m/%d/%Y').date()
+                    except ValueError:
+                        project.date_received = None
+            else:
+                project.date_received = None
+                
+            if date_needed:
+                try:
+                    project.date_needed = datetime.strptime(date_needed, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        project.date_needed = datetime.strptime(date_needed, '%m/%d/%Y').date()
+                    except ValueError:
+                        project.date_needed = None
+            else:
+                project.date_needed = None
             
             # Log changes
             changes = []
             for field, old_value in old_data.items():
-                new_value = getattr(project, f'project_{field}' if field not in ['point_of_contact', 'contact_phone_number'] else field)
+                new_value = getattr(project, f'project_{field}' if field not in ['point_of_contact', 'contact_phone_number', 'status', 'date_received', 'date_needed'] else field)
                 if old_value != new_value:
                     changes.append(f"{field}: '{old_value}' → '{new_value}'")
             
@@ -1314,6 +1358,28 @@ def add_update_project():
             message = "Project updated successfully."
         else:
             # Create new project
+            date_received = None
+            date_needed = None
+            
+            # Parse dates
+            if data.get('date_received'):
+                try:
+                    date_received = datetime.strptime(data.get('date_received'), '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        date_received = datetime.strptime(data.get('date_received'), '%m/%d/%Y').date()
+                    except ValueError:
+                        date_received = None
+                    
+            if data.get('date_needed'):
+                try:
+                    date_needed = datetime.strptime(data.get('date_needed'), '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        date_needed = datetime.strptime(data.get('date_needed'), '%m/%d/%Y').date()
+                    except ValueError:
+                        date_needed = None
+            
             new_project = Project(
                 project_name=project_name,
                 project_address=data.get('project_address'),
@@ -1321,7 +1387,10 @@ def add_update_project():
                 project_city=data.get('project_city'),
                 project_zip=data.get('project_zip'),
                 point_of_contact=data.get('point_of_contact'),
-                contact_phone_number=data.get('contact_phone_number')
+                contact_phone_number=data.get('contact_phone_number'),
+                status=data.get('status', 'Active'),
+                date_received=date_received,
+                date_needed=date_needed
             )
             db.session.add(new_project)
             
@@ -1337,6 +1406,8 @@ def add_update_project():
         db.session.rollback()
         log_audit(f"{action}_error", f"Error processing project {project_name}: {str(e)}")
         return jsonify({"success": False, "message": str(e)}), 500
+    
+
 
 @app.route('/add-sub-bid-to-main', methods=['POST'])
 @csrf.exempt  # Exempt CSRF protection if necessary
@@ -3435,122 +3506,171 @@ def get_bid_items(bid_id):
         return jsonify({"error": "An error occurred while fetching bid items"}), 500
 
 
-
 def generate_weekly_bid_schedule_pdf():
-    # Create a buffer for the PDF
-    buffer = BytesIO()
-    
-    # Create the PDF document in landscape orientation
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
-                            rightMargin=36, leftMargin=36, 
-                            topMargin=36, bottomMargin=18)
-    
-    # Container for the 'Flowable' objects
-    elements = []
-    
-    # Styles
-    styles = getSampleStyleSheet()
-    title_style = styles['Title']
-    heading_style = styles['Normal']
-    heading_style.fontSize = 10
-    
-    # Create a small paragraph style for project and customer
-    small_text_style = ParagraphStyle(
-        'SmallText',
-        parent=styles['Normal'],
-        fontSize=6,
-        leading=8
-    )
-    
-    # Title
-    elements.append(Paragraph("Weekly Bid Schedule", title_style))
-    elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y')}", heading_style))
-    elements.append(Spacer(1, 12))
-    
-    # Fetch and sort all bids
     try:
-        bids = Bid.query.all()
+        current_app.logger.info("Starting weekly bid schedule PDF generation")
+
+        # Create a buffer for the PDF
+        buffer = BytesIO()
+        
+        # Create the PDF document in landscape orientation
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                                rightMargin=36, leftMargin=36, 
+                                topMargin=36, bottomMargin=18)
+        
+        # Container for the 'Flowable' objects
+        elements = []
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = styles['Title']
+        heading_style = styles['Normal']
+        heading_style.fontSize = 10
+        
+        # Create a small paragraph style for project and customer
+        small_text_style = ParagraphStyle(
+            'SmallText',
+            parent=styles['Normal'],
+            fontSize=6,
+            leading=8
+        )
+        
+        # Title
+        elements.append(Paragraph("Weekly Bid Schedule", title_style))
+        elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y')}", heading_style))
+        elements.append(Spacer(1, 12))
+        
+        # Prepare table data
+        table_data = [
+            ['Urgency', 'Bid #', 'Job Description', 'Builder', 'Date Needed','Start', 'Estimator', 'Comments']
+        ]
+        
+        # Get all active bids
+        try:
+            # Join Bid with Project to filter by active status
+            bids_query = (
+                db.session.query(Bid, Project)
+                .join(Project, Bid.project_name == Project.project_name)
+                .filter(Project.status == 'Active')
+                # Add filter to only include base bids (pattern like 'B#####')
+                .filter(Bid.bid_id.op('~')('^B[0-9]+$'))  # Regex: starts with B followed by only numbers
+                .order_by(
+                    # Sort by urgency (custom order) and then bid date
+                    case(
+                        (Bid.urgency == 'A', 0),
+                        (Bid.urgency == 'B', 1),
+                        (Bid.urgency == 'C', 2),
+                        (Bid.urgency == 'R', 3),
+                        else_=4
+                    ),
+                    desc(Bid.bid_date)
+                )
+                .limit(50)  # Limit to prevent overwhelming PDF
+            )
+            
+            bids = bids_query.all()
+            current_app.logger.info(f"Found {len(bids)} active base bids for schedule")
+            
+        except Exception as query_error:
+            current_app.logger.error(f"Error querying bids: {str(query_error)}")
+            return None
+
+        # Urgency mapping for more descriptive display
+        urgency_map = {
+            'A': 'A',
+            'B': 'B',
+            'C': 'C',
+            'R': 'R'
+        }
+        
+        # Add bid rows
+        for bid, project in bids:
+            try:
+                display_urgency = urgency_map.get(bid.urgency, str(bid.urgency or '-'))
+                
+                # Use project's date needed, fallback to default
+                date_needed = (
+                    project.date_needed.strftime('%m/%d/%Y') 
+                    if project and project.date_needed 
+                    else 'N/A'
+                )
+
+                start_date = 'None Provided'
+                if project and project.start_date:
+                    start_date = project.start_date.strftime('%m/%d/%Y')
+
+
+                table_data.append([
+                    display_urgency,
+                    str(bid.bid_id),
+                    str(bid.project_name or 'N/A'),
+                    str(bid.customer_name or 'N/A'),
+                    date_needed,
+                    start_date,
+                    '',  # Estimator left blank
+                    str(bid.comments or '')
+                ])
+            except Exception as bid_error:
+                current_app.logger.warning(f"Error processing bid {bid.bid_id}: {str(bid_error)}")
+
+        # Calculate total page width in landscape
+        page_width = letter[1] - 72  # Subtracting margins (36 on each side)
+        
+        # Adjusted column widths to ensure Comments is fully visible
+        col_widths = [
+            0.07 * page_width,   # Urgency
+            0.09 * page_width,   # Bid #
+            0.20 * page_width,   # Job Description
+            0.18 * page_width,   # Builder
+            0.11 * page_width,   # Date Needed
+            0.09 * page_width,   # Start
+            0.09 * page_width,   # Estimator
+            0.17 * page_width    # Comments (increased width)
+        ]
+        
+        # Create table with calculated column widths
+        table = Table(table_data, 
+                      repeatRows=1, 
+                      colWidths=col_widths)
+        
+        # Style the table
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.grey),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 8),  # Header font
+            ('FONTSIZE', (0,1), (-1,-1), 7),  # Data font
+            ('BOTTOMPADDING', (0,0), (-1,0), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('BACKGROUND', (0,1), (-1,-1), colors.white),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('WORDWRAP', (7,0), (7,-1), 1)  # Specifically enable word wrap for Comments column
+        ]))
+        
+        elements.append(table)
+        
+        # Build PDF
+        doc.build(elements)
+        
+        # Move buffer position to the beginning
+        buffer.seek(0)
+        
+        current_app.logger.info("Weekly bid schedule PDF generated successfully")
+        
+        # Return the PDF as a file
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='weekly_bid_schedule.pdf'
+        )
+
     except Exception as e:
-        current_app.logger.error(f"Error fetching bids: {str(e)}")
+        current_app.logger.error(f"Unexpected error generating weekly bid schedule PDF: {str(e)}")
         return None
     
-    # Define urgency order for sorting
-    # Ensure A is first, then B, then C, then R
-    urgency_order = {'A': 0, 'B': 1, 'C': 2, 'R': 3, None: 4}
-    
-    sorted_bids = sorted(
-        bids,
-        key=lambda bid: (
-            urgency_order.get(bid.urgency, 4),  # Urgency sorted ascending
-            -bid.bid_date.toordinal() if bid.bid_date else float('inf')  # Date Needed sorted descending
-        )
-    )
-    
-    # Prepare table data with all bids
-    table_data = [
-        ['Urgency', 'Bid #', 'Job Description', 'Builder', 'Date Needed', 'Date Start', 'Estimator', 'Comments']
-    ]
-    
-    # Add bid rows
-    for bid in reversed(sorted_bids):
-        # Create paragraphs with small font for project and customer
-        project_para = Paragraph(str(bid.project_name), small_text_style)
-        customer_para = Paragraph(str(bid.customer_name), small_text_style)
-        
-        # Modify urgency display
-        display_urgency = 'A-High' if bid.urgency == 'A' else (
-            'B-Med' if bid.urgency == 'B' else (
-            'C-Low' if bid.urgency == 'C' else (
-            'R-Review' if bid.urgency == 'R' else str(bid.urgency or '-'))))
-        
-        table_data.append([
-            display_urgency,
-            str(bid.bid_id),
-            project_para,
-            customer_para,
-            bid.bid_date.strftime('%m/%d/%Y') if bid.bid_date else 'N/A',
-            bid.date_created.strftime('%m/%d/%Y') if bid.date_created else 'N/A',
-            '', # % Take Off - left blank as requested
-            str(bid.comments or '')
-        ])
-    
-    # Create table with column widths adjusted for landscape
-    table = Table(table_data, 
-                  repeatRows=1, 
-                  colWidths=[0.75*inch, 1*inch, 1.5*inch, 1.5*inch, 1*inch, 1*inch, 1*inch, 2*inch])
-    
-    # Style the table
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.white),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.black),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 8),  # Header font
-        ('FONTSIZE', (0,1), (-1,-1), 7),  # Data font
-        ('BOTTOMPADDING', (0,0), (-1,0), 3),
-        ('BACKGROUND', (0,1), (-1,-1), colors.white),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('WORDWRAP', (0,0), (-1,-1), 1)
-    ]))
-    
-    elements.append(table)
-    
-    # Build PDF
-    doc.build(elements)
-    
-    # Move buffer position to the beginning
-    buffer.seek(0)
-    
-    # Return the PDF as a file
-    return send_file(
-        buffer,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name='weekly_bid_schedule.pdf'
-    )
-
-# Add this route to your Flask application
 @app.route('/weekly-bid-schedule-pdf')
 @staff_required
 def weekly_bid_schedule_pdf():
@@ -3681,37 +3801,22 @@ def get_proposal_items(bid_id):
         return jsonify({"error": "An unexpected error occurred", "details": str(e)}), 500
 
 @app.route('/api/get-next-job-number', methods=['GET'])
+@admin_required
 def get_next_job_number():
     try:
-        # Query the database for all job IDs
-        job_numbers = db.session.query(Job.job_id).all()
+        # Start from 6050 instead of 6000
+        next_number = 6050
         
-        # Convert all job numbers to integers for comparison
-        existing_numbers = []
-        for job in job_numbers:
-            try:
-                num = int(job[0])
-                if num >= 6050:  # Only consider numbers >= 6000
-                    existing_numbers.append(num)
-            except ValueError:
-                continue
-        
-        if not existing_numbers:
-            # If no valid job numbers exist, start from 6000
-            next_job_number = '6000'
-        else:
-            # Get the highest number and increment
-            highest_number = max(existing_numbers)
-            if highest_number < 6000:
-                next_job_number = '6000'
-            else:
-                next_job_number = str(highest_number + 1)
+        # Keep incrementing until we find an unused job ID
+        while Job.query.get(str(next_number)) is not None:
+            next_number += 1
         
         return jsonify({
             'success': True,
-            'next_job_number': next_job_number
+            'next_job_number': str(next_number)
         })
     except Exception as e:
+        log_audit('get_next_job_number_error', f"Error finding next job number: {str(e)}")
         return jsonify({
             'success': False,
             'message': str(e)
@@ -5131,19 +5236,39 @@ def delete_project(project_name):
         flash(f'Error deleting project: {str(e)}', 'error')
     return redirect(url_for('manage_projects'))
 
-# 3. Enhanced project management route with detailed audit logging
+# Enhanced project management route with start_date field support
 @app.route('/manage-projects', methods=['GET', 'POST'])
 @staff_required
 def manage_projects():
     if request.method == 'POST':
         project_name = request.form.get('project_name')
+        
+        # Process date fields
+        date_received = None
+        if request.form.get('date_received'):
+            date_received = datetime.strptime(request.form.get('date_received'), '%Y-%m-%d').date()
+            
+        date_needed = None
+        if request.form.get('date_needed'):
+            date_needed = datetime.strptime(request.form.get('date_needed'), '%Y-%m-%d').date()
+            
+        start_date = None
+        if request.form.get('start_date'):
+            start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
+        
+        status = request.form.get('status', 'Active')
+        
         project_data = {
             'address': request.form.get('project_address'),
             'state': request.form.get('project_state'),
             'city': request.form.get('project_city'),
             'zip': request.form.get('project_zip'),
             'point_of_contact': request.form.get('point_of_contact'),
-            'contact_phone_number': request.form.get('contact_phone_number')
+            'contact_phone_number': request.form.get('contact_phone_number'),
+            'date_received': date_received,
+            'date_needed': date_needed,
+            'start_date': start_date,
+            'status': status
         }
 
         existing_project = Project.query.filter_by(project_name=project_name).first()
@@ -5157,7 +5282,11 @@ def manage_projects():
                     'city': existing_project.project_city,
                     'zip': existing_project.project_zip,
                     'point_of_contact': existing_project.point_of_contact,
-                    'contact_phone_number': existing_project.contact_phone_number
+                    'contact_phone_number': existing_project.contact_phone_number,
+                    'date_received': existing_project.date_received,
+                    'date_needed': existing_project.date_needed,
+                    'start_date': existing_project.start_date,
+                    'status': existing_project.status
                 }
                 
                 # Update project
@@ -5167,13 +5296,28 @@ def manage_projects():
                 existing_project.project_zip = project_data['zip']
                 existing_project.point_of_contact = project_data['point_of_contact']
                 existing_project.contact_phone_number = project_data['contact_phone_number']
+                existing_project.date_received = project_data['date_received']
+                existing_project.date_needed = project_data['date_needed']
+                existing_project.start_date = project_data['start_date']
+                existing_project.status = project_data['status']
                 
                 # Log changes
                 changes = []
                 for field, old_value in old_data.items():
                     new_value = project_data[field]
                     if old_value != new_value:
-                        changes.append(f"{field}: '{old_value}' → '{new_value}'")
+                        # Format date objects for readable output
+                        if field in ['date_received', 'date_needed', 'start_date'] and old_value:
+                            old_formatted = old_value.strftime('%Y-%m-%d')
+                        else:
+                            old_formatted = old_value
+                            
+                        if field in ['date_received', 'date_needed', 'start_date'] and new_value:
+                            new_formatted = new_value.strftime('%Y-%m-%d')
+                        else:
+                            new_formatted = new_value
+                            
+                        changes.append(f"{field}: '{old_formatted}' → '{new_formatted}'")
                 
                 if changes:
                     log_audit('update_project', 
@@ -5188,7 +5332,11 @@ def manage_projects():
                     project_city=project_data['city'],
                     project_zip=project_data['zip'],
                     point_of_contact=project_data['point_of_contact'],
-                    contact_phone_number=project_data['contact_phone_number']
+                    contact_phone_number=project_data['contact_phone_number'],
+                    date_received=project_data['date_received'],
+                    date_needed=project_data['date_needed'],
+                    start_date=project_data['start_date'],
+                    status=project_data['status']
                 )
                 db.session.add(new_project)
                 
@@ -5223,6 +5371,7 @@ def manage_projects():
         total_projects=total_projects
     )
 
+
 @app.route('/api/project/<project_name>', methods=['GET', 'PUT'])
 @staff_required
 def update_project(project_name):
@@ -5234,7 +5383,12 @@ def update_project(project_name):
             'project_address': project.project_address,
             'project_state': project.project_state,
             'project_city': project.project_city,
-            'project_zip': project.project_zip
+            'project_zip': project.project_zip,
+            'point_of_contact': project.point_of_contact,
+            'contact_phone_number': project.contact_phone_number,
+            'status': project.status,
+            'date_received': project.date_received.strftime('%Y-%m-%d') if project.date_received else None,
+            'date_needed': project.date_needed.strftime('%Y-%m-%d') if project.date_needed else None
         })
     
     elif request.method == 'PUT':
@@ -5244,13 +5398,41 @@ def update_project(project_name):
             project.project_state = data.get('project_state', project.project_state)
             project.project_city = data.get('project_city', project.project_city)
             project.project_zip = data.get('project_zip', project.project_zip)
+            project.point_of_contact = data.get('point_of_contact', project.point_of_contact)
+            project.contact_phone_number = data.get('contact_phone_number', project.contact_phone_number)
+            project.status = data.get('status', project.status)
+            
+            # Parse dates
+            date_received = data.get('date_received')
+            date_needed = data.get('date_needed')
+            
+            if date_received:
+                try:
+                    project.date_received = datetime.strptime(date_received, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        project.date_received = datetime.strptime(date_received, '%m/%d/%Y').date()
+                    except ValueError:
+                        project.date_received = None
+            else:
+                project.date_received = None
+                
+            if date_needed:
+                try:
+                    project.date_needed = datetime.strptime(date_needed, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        project.date_needed = datetime.strptime(date_needed, '%m/%d/%Y').date()
+                    except ValueError:
+                        project.date_needed = None
+            else:
+                project.date_needed = None
             
             db.session.commit()
             return jsonify({'success': True, 'message': 'Project updated successfully'}), 200
         except SQLAlchemyError as e:
             db.session.rollback()
             return jsonify({'success': False, 'message': str(e)}), 500
-
 
 @app.route('/autocomplete-factor-codes', methods=['GET'])
 @staff_required
@@ -6680,7 +6862,7 @@ def save_project():
         project_name = data.get('project_name')
         
         # Check if the project already exists
-        project = Project.query.get(project_name)
+        project = db.session.get(Project, project_name)
         
         if project:
             # Update existing project
