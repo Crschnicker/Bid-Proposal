@@ -4803,6 +4803,151 @@ const totalsStartX = colXOffsets[0];
         }
     }
 
+    function setupTokenRefresh() {
+    // Refresh token every 20 minutes
+    const REFRESH_INTERVAL = 1200000;
+    
+    // Function to refresh token using an existing page
+    function refreshToken() {
+        // Create a hidden iframe to load a page from the server
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+        
+        // Load a simple existing page that will contain a fresh CSRF token
+        iframe.src = '/refresh-token-helper';
+        
+        // When the iframe loads, extract the token
+        iframe.onload = function() {
+            try {
+                // Extract the CSRF token from the iframe document
+                const newToken = iframe.contentWindow.document.getElementById('csrf_token').value;
+                if (newToken) {
+                    // Update our token
+                    document.getElementById('csrf_token').value = newToken;
+                    console.log('CSRF token refreshed successfully');
+                }
+            } catch (error) {
+                console.error('Error extracting token from iframe:', error);
+            } finally {
+                // Clean up
+                document.body.removeChild(iframe);
+            }
+        };
+    }
+    
+    // Simpler alternative: Periodic user warnings
+    function showTokenWarning() {
+        const warningDiv = document.createElement('div');
+        warningDiv.style.position = 'fixed';
+        warningDiv.style.top = '10px';
+        warningDiv.style.right = '10px';
+        warningDiv.style.backgroundColor = '#ffdddd';
+        warningDiv.style.border = '1px solid #ff0000';
+        warningDiv.style.padding = '10px';
+        warningDiv.style.borderRadius = '5px';
+        warningDiv.style.zIndex = '9999';
+        warningDiv.innerHTML = `
+            <p><strong>Warning:</strong> Your session may be expiring soon.</p>
+            <p>To avoid losing work, please save now and reload the page.</p>
+            <button id="refreshPageBtn" style="margin-right: 10px;">Reload Page</button>
+            <button id="dismissWarningBtn">Dismiss</button>
+        `;
+        
+        document.body.appendChild(warningDiv);
+        
+        document.getElementById('refreshPageBtn').addEventListener('click', function() {
+            // Save work before reloading
+            saveBid().then(() => {
+                window.location.reload();
+            }).catch(err => {
+                alert('Error saving: ' + err.message + '\nPlease try manually saving before reloading.');
+            });
+        });
+        
+        document.getElementById('dismissWarningBtn').addEventListener('click', function() {
+            document.body.removeChild(warningDiv);
+        });
+    }
+    
+    // Set up periodic warnings
+    setInterval(showTokenWarning, REFRESH_INTERVAL);
+    
+    // Keep session alive with activity tracking
+    function trackActivity() {
+        // Store last activity time
+        localStorage.setItem('lastActivity', new Date().getTime());
+    }
+    
+    // Track user activity
+    ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(function(evt) {
+        document.addEventListener(evt, trackActivity, true);
+    });
+    
+    // Check activity and keep session alive
+    setInterval(function() {
+        const lastActivity = parseInt(localStorage.getItem('lastActivity') || '0');
+        const now = new Date().getTime();
+        
+        // If there was activity in the last 5 minutes
+        if (now - lastActivity < 300000) {
+            // Make a request to any existing page to keep session alive
+            fetch('/ping-session', { 
+                method: 'GET',
+                credentials: 'same-origin'
+            }).catch(e => console.log('Session ping error:', e));
+        }
+    }, 240000); // Every 4 minutes
+    
+    // Modified save button handler
+    const saveButton = document.getElementById('saveButton');
+    if (saveButton) {
+        // Store original onclick
+        const originalOnClick = saveButton.onclick;
+        
+        saveButton.onclick = function(e) {
+            e.preventDefault();
+            
+            // Auto-save the current state before attempting to save
+            const formData = new FormData();
+            formData.append('csrf_token', document.getElementById('csrf_token').value);
+            formData.append('bid_id', document.getElementById('bidId').value);
+            formData.append('auto_save', 'true');
+            
+            // Send auto-save request
+            fetch('/auto-save-bid', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(() => {
+                // Now try the actual save
+                if (typeof originalOnClick === 'function') {
+                    originalOnClick.call(this, e);
+                } else {
+                    saveBid();
+                }
+            })
+            .catch(err => {
+                console.error('Auto-save failed:', err);
+                
+                // Show token error message with reload option
+                if (confirm('Your session may have expired. Would you like to reload the page to refresh your session? (Your work will be auto-saved)')) {
+                    window.location.reload();
+                } else {
+                    // Try the regular save anyway
+                    saveBid();
+                }
+            });
+        };
+    }
+}
+
+// Initialize when document is ready
+document.addEventListener('DOMContentLoaded', function() {
+    setupTokenRefresh();
+});
+    
     function loadDefaultLaborRates() {
         fetch('/get-default-labor-rates')
             .then(response => response.json())
